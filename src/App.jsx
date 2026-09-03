@@ -379,19 +379,25 @@ const GlobalStyle = () => (
     @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Manrope:wght@400;500;600;700;800&display=swap');
 
     * { box-sizing: border-box; }
+    html, body { overscroll-behavior-y: none; }
     .evrion-root {
       font-family: 'Manrope', system-ui, sans-serif;
       background: #12190F;
       min-height: 100vh;
+      min-height: 100dvh;
       color: #F6EFDD;
       display: flex;
       justify-content: center;
       padding: 0;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: contain;
     }
     .evrion-shell {
       width: 100%;
       max-width: 480px;
       min-height: 100vh;
+      min-height: 100dvh;
       background: linear-gradient(180deg, #16210F 0%, #12190F 55%);
       position: relative;
       display: flex;
@@ -420,6 +426,9 @@ const GlobalStyle = () => (
       align-items: center;
       justify-content: center;
       gap: 8px;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
     }
     .evrion-btn:active { transform: scale(0.97); }
     .evrion-btn-primary { background: #E7B10A; color: #12190F; }
@@ -444,6 +453,9 @@ const GlobalStyle = () => (
       line-height: 1.4;
       cursor: pointer;
       transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
     }
     .evrion-answer:hover { border-color: #E7B10A; background: #23301A; }
     .evrion-answer:active { transform: scale(0.98); }
@@ -627,6 +639,7 @@ function TopBar({ onBack, title, right }) {
 
 function ChatScene({ question }) {
   const [shown, setShown] = useState(0);
+  const total = (question.chat || []).length;
   useEffect(() => {
     setShown(0);
     const lines = question.chat || [];
@@ -641,7 +654,16 @@ function ChatScene({ question }) {
   }, [question.id]);
 
   return (
-    <div className="evrion-card" style={{ marginBottom: 18 }}>
+    <div
+      className="evrion-card"
+      style={{ marginBottom: 18, cursor: shown < total ? "pointer" : "default" }}
+      onClick={() => shown < total && setShown(total)}
+    >
+      {shown < total && (
+        <div style={{ textAlign: "center", fontSize: 10.5, opacity: 0.35, marginBottom: 6, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+          Tap to skip
+        </div>
+      )}
       {(question.chat || []).slice(0, shown).map((line, idx) => {
         if (line.from === "system") {
           return <div key={idx} className="evrion-meta">{line.text}</div>;
