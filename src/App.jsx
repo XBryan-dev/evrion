@@ -230,6 +230,7 @@ function buildSeedContent() {
       title: "The Go-Slow",
       order: 10,
       active: true,
+      format: "scene",
       prompt: "You're stuck in the taxi. How you manage the go-slow?",
       chat: [
         { from: "system", text: "Traffic hasn't moved in 40 minutes." },
@@ -242,11 +243,9 @@ function buildSeedContent() {
       title: "The Group Photo",
       order: 11,
       active: true,
-      prompt: "How hungry-you go react?",
-      chat: [
-        { from: "them", text: "Wait wait, make we snap the food first before we chop!", who: "Achu" },
-        { from: "system", text: "The food is getting cold. Everyone is posing." },
-      ],
+      format: "quick",
+      prompt: "Everyone's posing for a photo before eating and the food is getting cold. How hungry-you go react?",
+      chat: [],
     },
   ];
 
@@ -459,6 +458,13 @@ const GlobalStyle = () => (
     }
     .evrion-answer:hover { border-color: #E7B10A; background: #23301A; }
     .evrion-answer:active { transform: scale(0.98); }
+    .evrion-answer.selected {
+      border-color: #E7B10A;
+      background: #E7B10A;
+      color: #12190F;
+    }
+    .evrion-answer.dimmed { opacity: 0.35; }
+    .evrion-answer:disabled { cursor: default; }
 
     .evrion-bubble-row { display: flex; margin-bottom: 8px; }
     .evrion-bubble-row.them { justify-content: flex-start; }
@@ -475,13 +481,18 @@ const GlobalStyle = () => (
     }
     .evrion-bubble.them { background: #F6EFDD; color: #12190F; border-bottom-left-radius: 4px; }
     .evrion-bubble.you { background: #E7B10A; color: #12190F; border-bottom-right-radius: 4px; }
+    /* System/narrator lines: a real readable line, not fine print */
     .evrion-bubble.system {
-      background: transparent;
-      color: rgba(246,239,221,0.55);
-      font-size: 12px;
-      font-style: italic;
+      background: rgba(246,239,221,0.06);
+      border: 1px solid rgba(246,239,221,0.12);
+      color: #F6EFDD;
+      font-size: 15px;
+      font-weight: 600;
+      font-style: normal;
+      line-height: 1.45;
       text-align: center;
-      max-width: 90%;
+      max-width: 92%;
+      border-radius: 14px;
     }
     .evrion-who {
       font-size: 10.5px;
@@ -492,14 +503,31 @@ const GlobalStyle = () => (
       margin-bottom: 2px;
     }
     .evrion-meta {
-      font-size: 11px;
-      color: rgba(246,239,221,0.45);
+      font-size: 12.5px;
+      font-weight: 700;
+      color: rgba(246,239,221,0.6);
       text-align: center;
-      margin: 6px 0;
+      margin: 10px 0;
     }
     @keyframes evrion-pop {
       from { opacity: 0; transform: translateY(6px) scale(0.97); }
       to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Scene format: a narrative read instead of chat bubbles */
+    .evrion-scene-line {
+      font-size: 16.5px;
+      line-height: 1.6;
+      font-weight: 500;
+      color: #F6EFDD;
+      margin-bottom: 12px;
+      animation: evrion-pop 0.25s ease both;
+    }
+    .evrion-scene-line:last-child { margin-bottom: 0; }
+    .evrion-scene-line.narrator {
+      color: rgba(246,239,221,0.65);
+      font-weight: 600;
+      font-size: 14.5px;
     }
 
     .evrion-card {
@@ -638,35 +666,63 @@ function TopBar({ onBack, title, right }) {
 }
 
 function ChatScene({ question }) {
+  const format = question.format || "chat"; // "chat" | "scene" | "quick"
   const [shown, setShown] = useState(0);
   const total = (question.chat || []).length;
+
   useEffect(() => {
     setShown(0);
     const lines = question.chat || [];
-    if (lines.length === 0) return;
+    if (lines.length === 0 || format === "quick") return;
     let i = 0;
     const interval = setInterval(() => {
       i += 1;
       setShown(i);
       if (i >= lines.length) clearInterval(interval);
-    }, 480);
+    }, format === "scene" ? 620 : 480);
     return () => clearInterval(interval);
-  }, [question.id]);
+  }, [question.id, format]);
 
+  if (format === "quick" || total === 0) return null;
+
+  const skip = () => shown < total && setShown(total);
+
+  if (format === "scene") {
+    return (
+      <div className="evrion-card" style={{ marginBottom: 18, cursor: shown < total ? "pointer" : "default" }} onClick={skip}>
+        {shown < total && (
+          <div style={{ textAlign: "center", fontSize: 10.5, opacity: 0.35, marginBottom: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Tap to skip
+          </div>
+        )}
+        {question.chat.slice(0, shown).map((line, idx) => (
+          <div key={idx} className={`evrion-scene-line ${line.from === "system" ? "narrator" : ""}`}>
+            {line.who ? `${line.who}: ` : ""}{line.text}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // "chat" format (default)
   return (
     <div
       className="evrion-card"
       style={{ marginBottom: 18, cursor: shown < total ? "pointer" : "default" }}
-      onClick={() => shown < total && setShown(total)}
+      onClick={skip}
     >
       {shown < total && (
         <div style={{ textAlign: "center", fontSize: 10.5, opacity: 0.35, marginBottom: 6, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>
           Tap to skip
         </div>
       )}
-      {(question.chat || []).slice(0, shown).map((line, idx) => {
+      {question.chat.slice(0, shown).map((line, idx) => {
         if (line.from === "system") {
-          return <div key={idx} className="evrion-meta">{line.text}</div>;
+          return (
+            <div key={idx} className="evrion-bubble-row system">
+              <div className="evrion-bubble system">{line.text}</div>
+            </div>
+          );
         }
         return (
           <div key={idx}>
@@ -754,6 +810,12 @@ function QuizView({ category, questions, answersByQuestion, onFinish, onBack }) 
     .sort((a, b) => a.order - b.order);
   const [index, setIndex] = useState(0);
   const [traitScores, setTraitScores] = useState({});
+  const [selectedId, setSelectedId] = useState(null);
+  const question = active.length > 0 ? active[index] : null;
+
+  useEffect(() => {
+    setSelectedId(null);
+  }, [question?.id]);
 
   if (active.length === 0) {
     return (
@@ -764,23 +826,27 @@ function QuizView({ category, questions, answersByQuestion, onFinish, onBack }) 
     );
   }
 
-  const question = active[index];
   const answers = (answersByQuestion[question.id] || []).slice().sort((a, b) => a.order - b.order);
 
   const pickAnswer = (answer) => {
+    if (selectedId) return; // already advancing, ignore extra taps
+    setSelectedId(answer.id);
     const next = { ...traitScores };
     Object.entries(answer.weights || {}).forEach(([traitId, w]) => {
       next[traitId] = (next[traitId] || 0) + w;
     });
     setTraitScores(next);
-    if (index + 1 < active.length) {
-      setIndex(index + 1);
-    } else {
-      onFinish(next);
-    }
+    setTimeout(() => {
+      if (index + 1 < active.length) {
+        setIndex(index + 1);
+      } else {
+        onFinish(next);
+      }
+    }, 320);
   };
 
   const pct = Math.round((index / active.length) * 100);
+  const isQuick = question.format === "quick";
 
   return (
     <div>
@@ -791,15 +857,24 @@ function QuizView({ category, questions, answersByQuestion, onFinish, onBack }) 
         </div>
       </div>
       <div className="evrion-scroll" style={{ paddingTop: 18 }}>
-        <div style={{ fontFamily: "'Archivo Black', sans-serif", fontSize: 19, marginBottom: 14 }}>{question.title}</div>
+        <div style={{ fontFamily: "'Archivo Black', sans-serif", fontSize: isQuick ? 23 : 19, marginBottom: 14 }}>{question.title}</div>
         <ChatScene question={question} key={question.id} />
-        <div style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 12, opacity: 0.85 }}>{question.prompt}</div>
+        <div style={{ fontSize: isQuick ? 17 : 14.5, fontWeight: 700, marginBottom: 12, opacity: 0.9 }}>{question.prompt}</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {answers.map((a) => (
-            <button key={a.id} className="evrion-answer" onClick={() => pickAnswer(a)}>
-              {a.text}
-            </button>
-          ))}
+          {answers.map((a) => {
+            const isSelected = selectedId === a.id;
+            const isDimmed = selectedId && !isSelected;
+            return (
+              <button
+                key={a.id}
+                className={`evrion-answer ${isSelected ? "selected" : ""} ${isDimmed ? "dimmed" : ""}`}
+                onClick={() => pickAnswer(a)}
+                disabled={!!selectedId}
+              >
+                {a.text}
+              </button>
+            );
+          })}
           {answers.length === 0 && <div className="evrion-empty">No answers set for this situation yet.</div>}
         </div>
       </div>
@@ -1300,6 +1375,7 @@ function PersonalityModal({ item, content, save, close }) {
 function QuestionModal({ item, defaultCategoryId, content, save, close }) {
   const [title, setTitle] = useState(item?.title || "");
   const [categoryId, setCategoryId] = useState(item?.categoryId || defaultCategoryId || content.categories[0]?.id || "");
+  const [format, setFormat] = useState(item?.format || "chat");
   const [prompt, setPrompt] = useState(item?.prompt || "How you go react?");
   const [order, setOrder] = useState(item?.order || content.questions.length + 1);
   const [chat, setChat] = useState(item?.chat || [{ from: "them", text: "" }]);
@@ -1322,7 +1398,7 @@ function QuestionModal({ item, defaultCategoryId, content, save, close }) {
   const submit = () => {
     if (!title.trim() || !categoryId) return;
     const qId = item?.id || uid("q");
-    const qPayload = { id: qId, categoryId, title, prompt, order: Number(order), active: item?.active !== false, chat: chat.filter((l) => l.text.trim()) };
+    const qPayload = { id: qId, categoryId, title, format, prompt, order: Number(order), active: item?.active !== false, chat: chat.filter((l) => l.text.trim()) };
 
     let nextQuestions;
     if (item) {
@@ -1361,7 +1437,22 @@ function QuestionModal({ item, defaultCategoryId, content, save, close }) {
       </div>
 
       <div className="evrion-field">
-        <label className="evrion-label">Chat / situation lines</label>
+        <label className="evrion-label">Format</label>
+        <select className="evrion-select" value={format} onChange={(e) => setFormat(e.target.value)}>
+          <option value="chat">Chat — message bubbles, back and forth</option>
+          <option value="scene">Scene — narrated text, no bubbles</option>
+          <option value="quick">Quick tap — straight to the question, no scene</option>
+        </select>
+        <div style={{ fontSize: 11.5, opacity: 0.5, marginTop: 5, lineHeight: 1.4 }}>
+          {format === "chat" && "Good for back-and-forth exchanges like a WhatsApp thread."}
+          {format === "scene" && "Good for setting a scene in a sentence or two, read like a story."}
+          {format === "quick" && "No scene at all — just the prompt and answers. Best for fast, simple situations."}
+        </div>
+      </div>
+
+      {format !== "quick" && (
+      <div className="evrion-field">
+        <label className="evrion-label">{format === "scene" ? "Scene lines" : "Chat / situation lines"}</label>
         {chat.map((line, idx) => (
           <div key={idx} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}>
             <select
@@ -1387,6 +1478,7 @@ function QuestionModal({ item, defaultCategoryId, content, save, close }) {
           <Plus size={13} /> Add line
         </button>
       </div>
+      )}
 
       <div className="evrion-field">
         <label className="evrion-label">Prompt (question asked to the player)</label>
