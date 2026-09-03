@@ -558,4 +558,1051 @@ const GlobalStyle = () => (
     .evrion-icon-btn {
       background: rgba(246,239,221,0.08);
       border: none;
-      
+      color: #F6EFDD;
+      border-radius: 8px;
+      width: 30px;
+      height: 30px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .evrion-icon-btn:hover { background: rgba(246,239,221,0.18); }
+    .evrion-icon-btn.danger:hover { background: #C1442E; }
+
+    .evrion-modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      display: flex; align-items: flex-end; justify-content: center; z-index: 50;
+    }
+    .evrion-modal {
+      width: 100%; max-width: 480px; max-height: 88vh; overflow-y: auto;
+      background: #16210F; border-radius: 20px 20px 0 0;
+      padding: 20px 20px 28px; border-top: 1px solid rgba(246,239,221,0.15);
+    }
+    .evrion-weight-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 0; border-bottom: 1px solid rgba(246,239,221,0.06);
+    }
+    .evrion-weight-input {
+      width: 60px; background: #12190F; border: 1.5px solid rgba(246,239,221,0.18);
+      color: #F6EFDD; border-radius: 8px; padding: 5px 6px; text-align: center; font-size: 13px;
+    }
+    .evrion-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(231,177,10,0.15); color: #E7B10A;
+      border-radius: 999px; padding: 3px 9px; font-size: 11.5px; font-weight: 700;
+    }
+    .evrion-banner {
+      display: flex; align-items: center; gap: 10px;
+      background: rgba(193,68,46,0.15); border: 1px solid rgba(193,68,46,0.4);
+      color: #F3C8BC; border-radius: 12px; padding: 12px 14px; font-size: 12.5px;
+      margin-bottom: 16px; line-height: 1.4;
+    }
+    .evrion-empty {
+      text-align: center; padding: 40px 16px; color: rgba(246,239,221,0.5); font-size: 14px;
+    }
+  `}</style>
+);
+
+/* ------------------------------------------------------------------ */
+/*  Small shared pieces                                                */
+/* ------------------------------------------------------------------ */
+
+function TopBar({ onBack, title, right }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 4px" }}>
+      <div style={{ width: 32 }}>
+        {onBack && (
+          <button className="evrion-icon-btn" onClick={onBack} aria-label="Back">
+            <ChevronLeft size={18} />
+          </button>
+        )}
+      </div>
+      <div style={{ fontWeight: 800, fontSize: 14, opacity: 0.8 }}>{title}</div>
+      <div style={{ width: 32, display: "flex", justifyContent: "flex-end" }}>{right}</div>
+    </div>
+  );
+}
+
+function ChatScene({ question }) {
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    setShown(0);
+    const lines = question.chat || [];
+    if (lines.length === 0) return;
+    let i = 0;
+    const interval = setInterval(() => {
+      i += 1;
+      setShown(i);
+      if (i >= lines.length) clearInterval(interval);
+    }, 480);
+    return () => clearInterval(interval);
+  }, [question.id]);
+
+  return (
+    <div className="evrion-card" style={{ marginBottom: 18 }}>
+      {(question.chat || []).slice(0, shown).map((line, idx) => {
+        if (line.from === "system") {
+          return <div key={idx} className="evrion-meta">{line.text}</div>;
+        }
+        return (
+          <div key={idx}>
+            {line.meta && <div className="evrion-meta">{line.meta}</div>}
+            <div className={`evrion-bubble-row ${line.from}`}>
+              <div className={`evrion-bubble ${line.from}`}>
+                {line.who && <div className="evrion-who">{line.who}</div>}
+                {line.text}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Public views                                                       */
+/* ------------------------------------------------------------------ */
+
+function HomeView({ onStart, onAdmin }) {
+  return (
+    <div className="evrion-scroll" style={{ display: "flex", flexDirection: "column", justifyContent: "center", minHeight: "100%" }}>
+      <div style={{ textAlign: "center", marginBottom: 8 }}>
+        <div className="evrion-wordmark" style={{ fontSize: 34, color: "#E7B10A" }}>EVRION</div>
+        <div style={{ fontSize: 13, letterSpacing: "0.04em", opacity: 0.6, marginTop: 2 }}>made for the vibes</div>
+      </div>
+
+      <div style={{ marginTop: 34, marginBottom: 18 }}>
+        <div className="evrion-wordmark" style={{ fontSize: 28, lineHeight: 1.15, color: "#F6EFDD" }}>
+          What type of Cameroonian are you?
+        </div>
+      </div>
+
+      <p style={{ fontSize: 15, lineHeight: 1.6, opacity: 0.75, marginBottom: 30 }}>
+        Not a test. Not general knowledge. Just those little situations that somehow expose you.
+      </p>
+
+      <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={onStart}>
+        Start the vibe check <ChevronRight size={17} />
+      </button>
+
+      <button
+        onClick={onAdmin}
+        style={{ background: "none", border: "none", color: "rgba(246,239,221,0.35)", fontSize: 12, marginTop: 22, cursor: "pointer" }}
+      >
+        Admin
+      </button>
+    </div>
+  );
+}
+
+function CategoryView({ categories, onPick, onBack }) {
+  const active = categories.filter((c) => c.active !== false).sort((a, b) => a.order - b.order);
+  return (
+    <div>
+      <TopBar onBack={onBack} title="Choose a category" />
+      <div className="evrion-scroll">
+        {active.length === 0 && (
+          <div className="evrion-empty">No categories yet. Check back soon — new EVRION quizzes dey come.</div>
+        )}
+        {active.map((c) => (
+          <button
+            key={c.id}
+            className="evrion-card"
+            style={{ width: "100%", textAlign: "left", marginBottom: 12, cursor: "pointer", border: "1.5px solid rgba(246,239,221,0.1)" }}
+            onClick={() => onPick(c)}
+          >
+            <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 4, fontFamily: "'Archivo Black', sans-serif" }}>{c.name}</div>
+            <div style={{ fontSize: 13.5, opacity: 0.65, lineHeight: 1.4 }}>{c.description}</div>
+            <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6, color: "#E7B10A", fontSize: 13, fontWeight: 700 }}>
+              Play <ChevronRight size={15} />
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function QuizView({ category, questions, answersByQuestion, onFinish, onBack }) {
+  const active = questions
+    .filter((q) => q.categoryId === category.id && q.active !== false)
+    .sort((a, b) => a.order - b.order);
+  const [index, setIndex] = useState(0);
+  const [traitScores, setTraitScores] = useState({});
+
+  if (active.length === 0) {
+    return (
+      <div>
+        <TopBar onBack={onBack} title={category.name} />
+        <div className="evrion-empty">No situations here yet. Try another category.</div>
+      </div>
+    );
+  }
+
+  const question = active[index];
+  const answers = (answersByQuestion[question.id] || []).slice().sort((a, b) => a.order - b.order);
+
+  const pickAnswer = (answer) => {
+    const next = { ...traitScores };
+    Object.entries(answer.weights || {}).forEach(([traitId, w]) => {
+      next[traitId] = (next[traitId] || 0) + w;
+    });
+    setTraitScores(next);
+    if (index + 1 < active.length) {
+      setIndex(index + 1);
+    } else {
+      onFinish(next);
+    }
+  };
+
+  const pct = Math.round((index / active.length) * 100);
+
+  return (
+    <div>
+      <TopBar onBack={index === 0 ? onBack : () => setIndex(index - 1)} title={`Question ${index + 1} of ${active.length}`} />
+      <div style={{ padding: "0 20px" }}>
+        <div className="evrion-progress-track">
+          <div className="evrion-progress-fill" style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+      <div className="evrion-scroll" style={{ paddingTop: 18 }}>
+        <div style={{ fontFamily: "'Archivo Black', sans-serif", fontSize: 19, marginBottom: 14 }}>{question.title}</div>
+        <ChatScene question={question} key={question.id} />
+        <div style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 12, opacity: 0.85 }}>{question.prompt}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {answers.map((a) => (
+            <button key={a.id} className="evrion-answer" onClick={() => pickAnswer(a)}>
+              {a.text}
+            </button>
+          ))}
+          {answers.length === 0 && <div className="evrion-empty">No answers set for this situation yet.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResultView({ personality, pct, onShare, onReplay, onCategories, shareStatus }) {
+  return (
+    <div>
+      <TopBar title="Your result" />
+      <div className="evrion-scroll" style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 12, letterSpacing: "0.05em", opacity: 0.55, marginBottom: 6, fontWeight: 700 }}>
+          YOUR EVRION TYPE
+        </div>
+        <div style={{ fontSize: 52, marginBottom: 6 }}>{personality?.emoji}</div>
+        <div className="evrion-wordmark" style={{ fontSize: 26, color: "#E7B10A", marginBottom: 14 }}>
+          {personality?.name}
+        </div>
+
+        <div className="evrion-card" style={{ textAlign: "left", marginBottom: 16 }}>
+          <p style={{ fontSize: 14.5, lineHeight: 1.6, opacity: 0.85, margin: 0 }}>{personality?.description}</p>
+        </div>
+
+        <div style={{ marginBottom: 22 }}>
+          <div style={{ fontSize: 12.5, opacity: 0.55, marginBottom: 6 }}>Match strength</div>
+          <div className="evrion-progress-track">
+            <div className="evrion-progress-fill" style={{ width: `${pct}%` }} />
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 800, marginTop: 6, color: "#E7B10A" }}>{pct}%</div>
+        </div>
+
+        <p style={{ fontSize: 11.5, opacity: 0.45, marginBottom: 26, lineHeight: 1.5 }}>
+          This comes from your choices and the EVRION personality profile — there's no right or wrong answer here.
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={onShare}>
+            <Share2 size={16} /> {shareStatus || "Share result"}
+          </button>
+          <button className="evrion-btn evrion-btn-secondary evrion-btn-block" onClick={onReplay}>
+            <RotateCcw size={16} /> Play again
+          </button>
+          <button className="evrion-btn evrion-btn-secondary evrion-btn-block" onClick={onCategories}>
+            <Layers size={16} /> Try another category
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SharedResultView({ personality, pct, onPlay }) {
+  return (
+    <div className="evrion-scroll" style={{ display: "flex", flexDirection: "column", justifyContent: "center", minHeight: "100%", textAlign: "center" }}>
+      <div className="evrion-wordmark" style={{ fontSize: 22, color: "#E7B10A", marginBottom: 18 }}>EVRION</div>
+      <div style={{ fontSize: 13, opacity: 0.6, marginBottom: 18 }}>A friend just found out:</div>
+      <div style={{ fontSize: 52, marginBottom: 6 }}>{personality?.emoji || "🇨🇲"}</div>
+      <div className="evrion-wordmark" style={{ fontSize: 24, marginBottom: 8 }}>{personality?.name || "Someone's EVRION type"}</div>
+      <div style={{ fontSize: 13, opacity: 0.6, marginBottom: 26 }}>{pct}% match</div>
+      <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={onPlay}>
+        Find out your own type <ChevronRight size={17} />
+      </button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Admin                                                               */
+/* ------------------------------------------------------------------ */
+
+function AdminLogin({ onBack, onSuccess }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setError("");
+    if (!supabase) {
+      setError("Supabase isn't configured yet — add your env vars first (see README.md).");
+      return;
+    }
+    setBusy(true);
+    try {
+      await signIn(email, password);
+      onSuccess();
+    } catch (e) {
+      setError(e.message || "Could not sign in.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <TopBar onBack={onBack} title="Admin" />
+      <div className="evrion-scroll">
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <Lock size={26} style={{ marginBottom: 8, opacity: 0.7 }} />
+          <div style={{ fontSize: 15, opacity: 0.7 }}>Owner access only</div>
+        </div>
+        {!supabase && (
+          <div className="evrion-banner">
+            <CloudOff size={16} /> Supabase isn't connected yet. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then create your admin user in Supabase's Authentication tab. See README.md.
+          </div>
+        )}
+        <div className="evrion-field">
+          <label className="evrion-label">Email</label>
+          <input type="email" className="evrion-input" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div className="evrion-field">
+          <label className="evrion-label">Password</label>
+          <input
+            type="password"
+            className="evrion-input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+          />
+        </div>
+        {error && <div style={{ color: "#E9967A", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+        <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={submit} disabled={busy}>
+          {busy ? "Signing in…" : "Sign in"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const ADMIN_TABS = ["Categories", "Questions", "Traits", "Personalities"];
+
+function AdminDashboard({ content, setContent, connected, synced, onInitialize, onBack, onLogout }) {
+  const [tab, setTab] = useState("Categories");
+  const [modal, setModal] = useState(null);
+  const [saveError, setSaveError] = useState("");
+
+  const save = useCallback(
+    async (next) => {
+      setContent(next);
+      if (connected) {
+        try {
+          await saveContent(next);
+          setSaveError("");
+        } catch (e) {
+          setSaveError(e.message || "Could not save to Supabase.");
+        }
+      }
+    },
+    [setContent, connected]
+  );
+
+  const closeModal = () => setModal(null);
+
+  return (
+    <div>
+      <TopBar
+        onBack={onBack}
+        title="EVRION Admin"
+        right={
+          <button className="evrion-icon-btn" onClick={onLogout} aria-label="Log out">
+            <LogOut size={15} />
+          </button>
+        }
+      />
+      <div className="evrion-scroll">
+        {!connected && (
+          <div className="evrion-banner">
+            <CloudOff size={16} /> Not connected to Supabase. Changes here will be lost on refresh — set up your env vars first.
+          </div>
+        )}
+        {connected && !synced && (
+          <div className="evrion-banner" style={{ background: "rgba(231,177,10,0.12)", borderColor: "rgba(231,177,10,0.4)", color: "#E7B10A" }}>
+            <UploadCloud size={16} />
+            <div style={{ flex: 1 }}>
+              No content saved in Supabase yet. Push the starter quiz to your database to begin editing it.
+              <button
+                className="evrion-btn evrion-btn-primary"
+                style={{ marginTop: 8, padding: "8px 12px", fontSize: 12.5 }}
+                onClick={onInitialize}
+              >
+                Initialize content in Supabase
+              </button>
+            </div>
+          </div>
+        )}
+        {saveError && <div className="evrion-banner">{saveError}</div>}
+
+        <div className="evrion-tabs">
+          {ADMIN_TABS.map((t) => (
+            <button key={t} className={`evrion-tab ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {tab === "Categories" && <CategoriesTab content={content} save={save} setModal={setModal} />}
+        {tab === "Questions" && <QuestionsTab content={content} save={save} setModal={setModal} />}
+        {tab === "Traits" && <TraitsTab content={content} save={save} setModal={setModal} />}
+        {tab === "Personalities" && <PersonalitiesTab content={content} save={save} setModal={setModal} />}
+      </div>
+
+      {modal && <Modal modal={modal} content={content} save={save} close={closeModal} />}
+    </div>
+  );
+}
+
+function SectionHeader({ label, onAdd }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 800, opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.03em" }}>{label}</div>
+      <button className="evrion-icon-btn" onClick={onAdd}><Plus size={16} /></button>
+    </div>
+  );
+}
+
+function CategoriesTab({ content, save, setModal }) {
+  const items = content.categories.slice().sort((a, b) => a.order - b.order);
+  const remove = (id) => {
+    if (!confirm("Delete this category? Its questions will remain but won't be reachable.")) return;
+    save({ ...content, categories: content.categories.filter((c) => c.id !== id) });
+  };
+  const toggleActive = (c) => {
+    save({ ...content, categories: content.categories.map((x) => (x.id === c.id ? { ...x, active: x.active === false } : x)) });
+  };
+  return (
+    <div>
+      <SectionHeader label="Categories" onAdd={() => setModal({ type: "category", item: null })} />
+      {items.length === 0 && <div className="evrion-empty">No categories yet.</div>}
+      {items.map((c) => (
+        <div className="evrion-list-item" key={c.id}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{c.name} {c.active === false && <span className="evrion-chip" style={{ marginLeft: 6 }}>hidden</span>}</div>
+            <div style={{ fontSize: 12, opacity: 0.55, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.description}</div>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button className="evrion-icon-btn" onClick={() => toggleActive(c)}>{c.active === false ? <Check size={14} /> : <X size={14} />}</button>
+            <button className="evrion-icon-btn" onClick={() => setModal({ type: "category", item: c })}><Pencil size={14} /></button>
+            <button className="evrion-icon-btn danger" onClick={() => remove(c.id)}><Trash2 size={14} /></button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function QuestionsTab({ content, save, setModal }) {
+  const [catFilter, setCatFilter] = useState(content.categories[0]?.id || "");
+  const items = content.questions
+    .filter((q) => !catFilter || q.categoryId === catFilter)
+    .slice()
+    .sort((a, b) => a.order - b.order);
+
+  const remove = (id) => {
+    if (!confirm("Delete this question and its answers?")) return;
+    save({
+      ...content,
+      questions: content.questions.filter((q) => q.id !== id),
+      answers: content.answers.filter((a) => a.questionId !== id),
+    });
+  };
+  const toggleActive = (q) => {
+    save({ ...content, questions: content.questions.map((x) => (x.id === q.id ? { ...x, active: x.active === false } : x)) });
+  };
+
+  return (
+    <div>
+      <div className="evrion-field">
+        <label className="evrion-label">Category</label>
+        <select className="evrion-select" value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
+          {content.categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+      </div>
+      <SectionHeader label="Questions" onAdd={() => setModal({ type: "question", item: null, categoryId: catFilter })} />
+      {items.length === 0 && <div className="evrion-empty">No questions in this category yet.</div>}
+      {items.map((q) => {
+        const answerCount = content.answers.filter((a) => a.questionId === q.id).length;
+        return (
+          <div className="evrion-list-item" key={q.id}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>{q.title} {q.active === false && <span className="evrion-chip" style={{ marginLeft: 6 }}>hidden</span>}</div>
+              <div style={{ fontSize: 12, opacity: 0.55 }}>{answerCount} answer{answerCount !== 1 ? "s" : ""} · order {q.order}</div>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button className="evrion-icon-btn" onClick={() => toggleActive(q)}>{q.active === false ? <Check size={14} /> : <X size={14} />}</button>
+              <button className="evrion-icon-btn" onClick={() => setModal({ type: "question", item: q })}><Pencil size={14} /></button>
+              <button className="evrion-icon-btn danger" onClick={() => remove(q.id)}><Trash2 size={14} /></button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TraitsTab({ content, save, setModal }) {
+  const remove = (id) => {
+    if (!confirm("Delete this trait? It will be removed from any answers/personalities using it.")) return;
+    const answers = content.answers.map((a) => {
+      const w = { ...a.weights };
+      delete w[id];
+      return { ...a, weights: w };
+    });
+    const personalities = content.personalities.map((p) => {
+      const w = { ...p.traitWeights };
+      delete w[id];
+      return { ...p, traitWeights: w };
+    });
+    save({ ...content, traits: content.traits.filter((t) => t.id !== id), answers, personalities });
+  };
+  return (
+    <div>
+      <SectionHeader label="Traits" onAdd={() => setModal({ type: "trait", item: null })} />
+      {content.traits.map((t) => (
+        <div className="evrion-list-item" key={t.id}>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>{t.name}</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button className="evrion-icon-btn" onClick={() => setModal({ type: "trait", item: t })}><Pencil size={14} /></button>
+            <button className="evrion-icon-btn danger" onClick={() => remove(t.id)}><Trash2 size={14} /></button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PersonalitiesTab({ content, save, setModal }) {
+  const items = content.personalities.slice().sort((a, b) => a.order - b.order);
+  const remove = (id) => {
+    if (!confirm("Delete this personality?")) return;
+    save({ ...content, personalities: content.personalities.filter((p) => p.id !== id) });
+  };
+  const toggleActive = (p) => {
+    save({ ...content, personalities: content.personalities.map((x) => (x.id === p.id ? { ...x, active: x.active === false } : x)) });
+  };
+  return (
+    <div>
+      <SectionHeader label="Personalities" onAdd={() => setModal({ type: "personality", item: null })} />
+      {items.map((p) => (
+        <div className="evrion-list-item" key={p.id}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{p.emoji} {p.name} {p.active === false && <span className="evrion-chip" style={{ marginLeft: 6 }}>hidden</span>}</div>
+            <div style={{ fontSize: 12, opacity: 0.55, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.description}</div>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button className="evrion-icon-btn" onClick={() => toggleActive(p)}>{p.active === false ? <Check size={14} /> : <X size={14} />}</button>
+            <button className="evrion-icon-btn" onClick={() => setModal({ type: "personality", item: p })}><Pencil size={14} /></button>
+            <button className="evrion-icon-btn danger" onClick={() => remove(p.id)}><Trash2 size={14} /></button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ---- Modal: handles category / question(+answers) / trait / personality forms ---- */
+
+function Modal({ modal, content, save, close }) {
+  const { type, item } = modal;
+  if (type === "category") return <CategoryModal item={item} content={content} save={save} close={close} />;
+  if (type === "question") return <QuestionModal item={item} defaultCategoryId={modal.categoryId} content={content} save={save} close={close} />;
+  if (type === "trait") return <TraitModal item={item} content={content} save={save} close={close} />;
+  if (type === "personality") return <PersonalityModal item={item} content={content} save={save} close={close} />;
+  return null;
+}
+
+function ModalShell({ title, close, children }) {
+  return (
+    <div className="evrion-modal-backdrop" onClick={close}>
+      <div className="evrion-modal" onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontFamily: "'Archivo Black', sans-serif", fontSize: 17 }}>{title}</div>
+          <button className="evrion-icon-btn" onClick={close}><X size={16} /></button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function CategoryModal({ item, content, save, close }) {
+  const [name, setName] = useState(item?.name || "");
+  const [description, setDescription] = useState(item?.description || "");
+  const [order, setOrder] = useState(item?.order || content.categories.length + 1);
+
+  const submit = () => {
+    if (!name.trim()) return;
+    if (item) {
+      save({ ...content, categories: content.categories.map((c) => (c.id === item.id ? { ...c, name, description, order: Number(order) } : c)) });
+    } else {
+      save({ ...content, categories: [...content.categories, { id: uid("cat"), name, description, order: Number(order), active: true }] });
+    }
+    close();
+  };
+
+  return (
+    <ModalShell title={item ? "Edit category" : "New category"} close={close}>
+      <div className="evrion-field">
+        <label className="evrion-label">Name</label>
+        <input className="evrion-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Cameroon Life" />
+      </div>
+      <div className="evrion-field">
+        <label className="evrion-label">Description</label>
+        <textarea className="evrion-textarea" value={description} onChange={(e) => setDescription(e.target.value)} />
+      </div>
+      <div className="evrion-field">
+        <label className="evrion-label">Order</label>
+        <input type="number" className="evrion-input" value={order} onChange={(e) => setOrder(e.target.value)} />
+      </div>
+      <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={submit}>Save</button>
+    </ModalShell>
+  );
+}
+
+function TraitModal({ item, content, save, close }) {
+  const [name, setName] = useState(item?.name || "");
+  const submit = () => {
+    if (!name.trim()) return;
+    if (item) {
+      save({ ...content, traits: content.traits.map((t) => (t.id === item.id ? { ...t, name } : t)) });
+    } else {
+      save({ ...content, traits: [...content.traits, { id: uid("trait"), name }] });
+    }
+    close();
+  };
+  return (
+    <ModalShell title={item ? "Edit trait" : "New trait"} close={close}>
+      <div className="evrion-field">
+        <label className="evrion-label">Name</label>
+        <input className="evrion-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Hustle" />
+      </div>
+      <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={submit}>Save</button>
+    </ModalShell>
+  );
+}
+
+function PersonalityModal({ item, content, save, close }) {
+  const [name, setName] = useState(item?.name || "");
+  const [emoji, setEmoji] = useState(item?.emoji || "✨");
+  const [description, setDescription] = useState(item?.description || "");
+  const [order, setOrder] = useState(item?.order || content.personalities.length + 1);
+  const [weights, setWeights] = useState(item?.traitWeights || {});
+
+  const setWeight = (traitId, val) => setWeights({ ...weights, [traitId]: val === "" ? 0 : Number(val) });
+
+  const submit = () => {
+    if (!name.trim()) return;
+    const payload = { name, emoji, description, order: Number(order), active: item?.active !== false, traitWeights: weights };
+    if (item) {
+      save({ ...content, personalities: content.personalities.map((p) => (p.id === item.id ? { ...p, ...payload } : p)) });
+    } else {
+      save({ ...content, personalities: [...content.personalities, { id: uid("pers"), ...payload }] });
+    }
+    close();
+  };
+
+  return (
+    <ModalShell title={item ? "Edit personality" : "New personality"} close={close}>
+      <div className="evrion-field" style={{ display: "flex", gap: 10 }}>
+        <div style={{ width: 70 }}>
+          <label className="evrion-label">Emoji</label>
+          <input className="evrion-input" value={emoji} onChange={(e) => setEmoji(e.target.value)} style={{ textAlign: "center" }} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label className="evrion-label">Name</label>
+          <input className="evrion-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="The Straight Shooter" />
+        </div>
+      </div>
+      <div className="evrion-field">
+        <label className="evrion-label">Description</label>
+        <textarea className="evrion-textarea" value={description} onChange={(e) => setDescription(e.target.value)} />
+      </div>
+      <div className="evrion-field">
+        <label className="evrion-label">Order</label>
+        <input type="number" className="evrion-input" value={order} onChange={(e) => setOrder(e.target.value)} />
+      </div>
+      <div className="evrion-field">
+        <label className="evrion-label">Trait weights (how strongly each trait contributes)</label>
+        {content.traits.map((t) => (
+          <div className="evrion-weight-row" key={t.id}>
+            <span style={{ fontSize: 13.5 }}>{t.name}</span>
+            <input
+              type="number"
+              className="evrion-weight-input"
+              value={weights[t.id] ?? 0}
+              onChange={(e) => setWeight(t.id, e.target.value)}
+            />
+          </div>
+        ))}
+      </div>
+      <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={submit}>Save</button>
+    </ModalShell>
+  );
+}
+
+function QuestionModal({ item, defaultCategoryId, content, save, close }) {
+  const [title, setTitle] = useState(item?.title || "");
+  const [categoryId, setCategoryId] = useState(item?.categoryId || defaultCategoryId || content.categories[0]?.id || "");
+  const [prompt, setPrompt] = useState(item?.prompt || "How you go react?");
+  const [order, setOrder] = useState(item?.order || content.questions.length + 1);
+  const [chat, setChat] = useState(item?.chat || [{ from: "them", text: "" }]);
+  const [answers, setAnswers] = useState(
+    item ? content.answers.filter((a) => a.questionId === item.id).sort((a, b) => a.order - b.order) : [{ id: uid("a"), text: "", order: 1, weights: {} }]
+  );
+
+  const updateChatLine = (idx, patch) => setChat(chat.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+  const addChatLine = () => setChat([...chat, { from: "them", text: "" }]);
+  const removeChatLine = (idx) => setChat(chat.filter((_, i) => i !== idx));
+
+  const updateAnswer = (idx, patch) => setAnswers(answers.map((a, i) => (i === idx ? { ...a, ...patch } : a)));
+  const updateAnswerWeight = (idx, traitId, val) =>
+    setAnswers(
+      answers.map((a, i) => (i === idx ? { ...a, weights: { ...a.weights, [traitId]: val === "" ? 0 : Number(val) } } : a))
+    );
+  const addAnswer = () => setAnswers([...answers, { id: uid("a"), text: "", order: answers.length + 1, weights: {} }]);
+  const removeAnswer = (idx) => setAnswers(answers.filter((_, i) => i !== idx));
+
+  const submit = () => {
+    if (!title.trim() || !categoryId) return;
+    const qId = item?.id || uid("q");
+    const qPayload = { id: qId, categoryId, title, prompt, order: Number(order), active: item?.active !== false, chat: chat.filter((l) => l.text.trim()) };
+
+    let nextQuestions;
+    if (item) {
+      nextQuestions = content.questions.map((q) => (q.id === item.id ? qPayload : q));
+    } else {
+      nextQuestions = [...content.questions, qPayload];
+    }
+
+    const otherAnswers = content.answers.filter((a) => a.questionId !== qId);
+    const nextAnswers = [
+      ...otherAnswers,
+      ...answers.filter((a) => a.text.trim()).map((a, i) => ({ ...a, questionId: qId, order: i + 1 })),
+    ];
+
+    save({ ...content, questions: nextQuestions, answers: nextAnswers });
+    close();
+  };
+
+  return (
+    <ModalShell title={item ? "Edit question" : "New question"} close={close}>
+      <div className="evrion-field">
+        <label className="evrion-label">Category</label>
+        <select className="evrion-select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+          {content.categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+      </div>
+      <div className="evrion-field">
+        <label className="evrion-label">Title</label>
+        <input className="evrion-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="I Dey Come" />
+      </div>
+      <div className="evrion-field">
+        <label className="evrion-label">Order</label>
+        <input type="number" className="evrion-input" value={order} onChange={(e) => setOrder(e.target.value)} />
+      </div>
+
+      <div className="evrion-field">
+        <label className="evrion-label">Chat / situation lines</label>
+        {chat.map((line, idx) => (
+          <div key={idx} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}>
+            <select
+              className="evrion-select"
+              style={{ width: 88, flexShrink: 0 }}
+              value={line.from}
+              onChange={(e) => updateChatLine(idx, { from: e.target.value })}
+            >
+              <option value="them">Them</option>
+              <option value="you">You</option>
+              <option value="system">Note</option>
+            </select>
+            <input
+              className="evrion-input"
+              value={line.text}
+              onChange={(e) => updateChatLine(idx, { text: e.target.value })}
+              placeholder="Line text"
+            />
+            <button className="evrion-icon-btn danger" onClick={() => removeChatLine(idx)}><Trash2 size={13} /></button>
+          </div>
+        ))}
+        <button className="evrion-btn evrion-btn-secondary" style={{ fontSize: 12.5, padding: "8px 12px" }} onClick={addChatLine}>
+          <Plus size={13} /> Add line
+        </button>
+      </div>
+
+      <div className="evrion-field">
+        <label className="evrion-label">Prompt (question asked to the player)</label>
+        <input className="evrion-input" value={prompt} onChange={(e) => setPrompt(e.target.value)} />
+      </div>
+
+      <div className="evrion-field">
+        <label className="evrion-label">Answers &amp; trait weights</label>
+        {answers.map((a, idx) => (
+          <div key={a.id} className="evrion-card" style={{ marginBottom: 10, padding: 12 }}>
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              <input
+                className="evrion-input"
+                value={a.text}
+                onChange={(e) => updateAnswer(idx, { text: e.target.value })}
+                placeholder="Answer text"
+              />
+              <button className="evrion-icon-btn danger" onClick={() => removeAnswer(idx)}><Trash2 size={13} /></button>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {content.traits.map((t) => (
+                <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: 11.5, opacity: 0.55 }}>{t.name}</span>
+                  <input
+                    type="number"
+                    className="evrion-weight-input"
+                    style={{ width: 44 }}
+                    value={a.weights?.[t.id] ?? 0}
+                    onChange={(e) => updateAnswerWeight(idx, t.id, e.target.value)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        <button className="evrion-btn evrion-btn-secondary" style={{ fontSize: 12.5, padding: "8px 12px" }} onClick={addAnswer}>
+          <Plus size={13} /> Add answer
+        </button>
+      </div>
+
+      <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={submit}>Save question</button>
+    </ModalShell>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Root App                                                           */
+/* ------------------------------------------------------------------ */
+
+export default function App() {
+  const [content, setContent] = useState(null);
+  const [synced, setSynced] = useState(false); // true once we know Supabase has a saved row
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState("home");
+  const [category, setCategory] = useState(null);
+  const [result, setResult] = useState(null);
+  const [sharedResult, setSharedResult] = useState(null);
+  const [adminLoggedIn, setAdminLoggedIn] = useState(false);
+  const [shareStatus, setShareStatus] = useState("");
+
+  const connected = !!supabase;
+
+  useEffect(() => {
+    (async () => {
+      const remote = await loadContent();
+      if (remote) {
+        setContent(remote);
+        setSynced(true);
+      } else {
+        setContent(buildSeedContent());
+        setSynced(false);
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("r");
+      if (token) {
+        const decoded = decodeResult(token);
+        if (decoded) {
+          const source = remote || buildSeedContent();
+          const personality = source.personalities.find((p) => p.id === decoded.p);
+          if (personality) {
+            setSharedResult({ personality, pct: decoded.m });
+            setView("shared");
+          }
+        }
+      }
+
+      if (connected) {
+        const session = await getSession();
+        setAdminLoggedIn(!!session);
+      }
+
+      setLoading(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!connected) return undefined;
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAdminLoggedIn(!!session);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [connected]);
+
+  const answersByQuestion = useMemo(() => {
+    if (!content) return {};
+    const map = {};
+    content.answers.forEach((a) => {
+      if (!map[a.questionId]) map[a.questionId] = [];
+      map[a.questionId].push(a);
+    });
+    return map;
+  }, [content]);
+
+  const goHome = () => {
+    setView("home");
+    setResult(null);
+    setShareStatus("");
+    window.history.replaceState({}, "", window.location.pathname);
+  };
+
+  const finishQuiz = (traitScores) => {
+    const { top, pct } = scorePersonalities(traitScores, content.personalities);
+    setResult({ personality: top, pct, categoryId: category.id });
+    setView("result");
+  };
+
+  const doShare = async () => {
+    if (!result) return;
+    const token = encodeResult(result.personality.id, result.categoryId, result.pct);
+    const url = `${window.location.origin}${window.location.pathname}?r=${token}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "EVRION — What type of Cameroonian are you?", text: `I got "${result.personality.name}" on EVRION!`, url });
+        setShareStatus("Shared!");
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(url);
+        setShareStatus("Link copied!");
+      } else {
+        setShareStatus(url);
+      }
+    } catch (e) {
+      setShareStatus("Copy the link from your address bar");
+    }
+    setTimeout(() => setShareStatus(""), 2500);
+  };
+
+  const initializeContent = async () => {
+    const seed = buildSeedContent();
+    setContent(seed);
+    try {
+      await saveContent(seed);
+      setSynced(true);
+    } catch (e) {
+      alert(`Could not save to Supabase: ${e.message}`);
+    }
+  };
+
+  if (loading || !content) {
+    return (
+      <div className="evrion-root">
+        <GlobalStyle />
+        <div className="evrion-shell" style={{ alignItems: "center", justifyContent: "center", display: "flex" }}>
+          <div className="evrion-wordmark" style={{ color: "#E7B10A", fontSize: 22 }}>EVRION</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="evrion-root">
+      <GlobalStyle />
+      <div className="evrion-shell">
+        {view === "home" && <HomeView onStart={() => setView("categories")} onAdmin={() => setView(adminLoggedIn ? "adminHome" : "adminLogin")} />}
+
+        {view === "shared" && sharedResult && (
+          <SharedResultView personality={sharedResult.personality} pct={sharedResult.pct} onPlay={goHome} />
+        )}
+
+        {view === "categories" && (
+          <CategoryView
+            categories={content.categories}
+            onPick={(c) => {
+              setCategory(c);
+              setView("quiz");
+            }}
+            onBack={goHome}
+          />
+        )}
+
+        {view === "quiz" && category && (
+          <QuizView
+            category={category}
+            questions={content.questions}
+            answersByQuestion={answersByQuestion}
+            onFinish={finishQuiz}
+            onBack={() => setView("categories")}
+          />
+        )}
+
+        {view === "result" && result && (
+          <ResultView
+            personality={result.personality}
+            pct={result.pct}
+            shareStatus={shareStatus}
+            onShare={doShare}
+            onReplay={() => setView("quiz")}
+            onCategories={() => setView("categories")}
+          />
+        )}
+
+        {view === "adminLogin" && (
+          <AdminLogin
+            onBack={goHome}
+            onSuccess={() => {
+              setAdminLoggedIn(true);
+              setView("adminHome");
+            }}
+          />
+        )}
+
+        {view === "adminHome" && adminLoggedIn && (
+          <AdminDashboard
+            content={content}
+            setContent={setContent}
+            connected={connected}
+            synced={synced}
+            onInitialize={initializeContent}
+            onBack={goHome}
+            onLogout={async () => {
+              await signOut();
+              setAdminLoggedIn(false);
+              goHome();
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
