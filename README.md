@@ -22,10 +22,14 @@ done through a website UI, not the command line, except two `npm` commands.
 4. Paste in the contents of `supabase-setup.sql` (in this folder) and click **Run**.
    This creates the `evrion_content` table and locks it so anyone can read the
    quiz, but only a logged-in user (you) can edit it.
-5. Go to **Authentication → Users → Add user** and create yourself an account
+5. Run **New query** again, paste in `supabase-today-page.sql`, and click **Run**.
+   This adds one more table that lets Today's Page polls work — anyone can
+   vote and see results, but nobody can edit or delete a vote through the app
+   (no new login is introduced by this).
+6. Go to **Authentication → Users → Add user** and create yourself an account
    (your email + a password). This is your one admin login — don't enable public
    sign-ups anywhere.
-6. Go to **Settings → API**. You'll need two values from this page in a minute:
+7. Go to **Settings → API**. You'll need two values from this page in a minute:
    - **Project URL**
    - **anon public** key
 
@@ -88,6 +92,21 @@ If you skipped the local step above, log into `/` on your live site, tap
 load the starter quiz.
 
 ---
+
+## Today's Page (new in V1.1)
+
+Today's Page is EVRION's content-driven daily front page. From Admin → **Today's Page**:
+
+- Pick a date, add blocks (Text, Image, Video, Poll, Situation, Announcement/Feature, Button/Link), reorder them, edit or remove any of them.
+- **Preview** shows exactly what the public page will look like before you commit to anything.
+- **Save draft** keeps your work without showing it to visitors.
+- **Publish** makes that date's page live at the public "🗓 Today's Page" link on the home screen.
+
+If nobody has published *today's* date yet, visitors automatically see the most recently published page instead of a blank screen (with a small note showing which date they're looking at) — so the page never goes empty just because you didn't publish that exact morning.
+
+Today's Page uses its own visual language (deep midnight background, electric violet, warm orange accents) — a first look at where EVRION's overall design is headed, without touching the rest of the app yet.
+
+Adding a new block type later means adding one entry to `TODAY_BLOCK_TYPES`, one case in `defaultBlockData`, one render case in `TodayBlockPublic`, and one form section in `TodayBlockEditModal` — Today's Page itself doesn't need to change.
 
 ## Editing the quiz after launch
 
