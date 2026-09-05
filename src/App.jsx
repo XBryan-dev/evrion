@@ -16,7 +16,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
-import { loadContent, saveContent, signIn, signOut, getSession } from "./storage";
+import { loadContent, saveContent, signIn, signOut, getSession, castVote, fetchVoteCounts } from "./storage";
 
 /* ------------------------------------------------------------------ */
 /*  EVRION — "What type of Cameroonian are you?"                      */
@@ -325,7 +325,45 @@ function buildSeedContent() {
     });
   });
 
-  return { categories, questions, answers, traits, personalities };
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayPages = [
+    {
+      id: uid("tp"),
+      date: todayStr,
+      status: "published",
+      blocks: [
+        {
+          id: uid("blk"),
+          type: "announcement",
+          badge: "NEW",
+          title: "Welcome to Today's Page",
+          body: "This is EVRION's living front page — new stuff drops here, edited from Admin, no rebuild needed.",
+          ctaLabel: "Take the vibe check",
+          ctaUrl: "",
+        },
+        {
+          id: uid("blk"),
+          type: "situation",
+          title: "The Data Bundle",
+          format: "quick",
+          prompt: "Your data finishes mid-video call. How you go react?",
+          chat: [],
+        },
+        {
+          id: uid("blk"),
+          type: "poll",
+          question: "Who's more likely to say 'I dey come' and disappear?",
+          options: [
+            { id: uid("opt"), text: "My guy" },
+            { id: uid("opt"), text: "My cousin" },
+            { id: uid("opt"), text: "Honestly, me" },
+          ],
+        },
+      ],
+    },
+  ];
+
+  return { categories, questions, answers, traits, personalities, todayPages };
 }
 
 /* ------------------------------- Share token ------------------------------- */
@@ -642,6 +680,116 @@ const GlobalStyle = () => (
     .evrion-empty {
       text-align: center; padding: 40px 16px; color: rgba(246,239,221,0.5); font-size: 14px;
     }
+
+    /* ---------------------------------------------------------------- */
+    /*  Today's Page — EVRION's new visual direction: midnight + violet  */
+    /*  + controlled warm orange. Scoped to .evtoday- so the rest of the */
+    /*  app (quiz, admin) is untouched for now.                          */
+    /* ---------------------------------------------------------------- */
+    .evtoday-root {
+      background: radial-gradient(120% 160% at 50% -10%, #201640 0%, #0B0A16 55%, #08070F 100%);
+      min-height: 100%;
+      color: #EDEBFA;
+    }
+    .evtoday-header {
+      padding: 22px 20px 6px;
+      text-align: center;
+    }
+    .evtoday-eyebrow {
+      font-size: 11.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+      color: #B79CFF; opacity: 0.85; margin-bottom: 4px;
+    }
+    .evtoday-date {
+      font-size: 13px; opacity: 0.5; margin-bottom: 2px;
+    }
+    .evtoday-block {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(183,156,255,0.16);
+      border-radius: 20px;
+      padding: 20px;
+      margin: 0 20px 16px;
+      backdrop-filter: blur(6px);
+    }
+    .evtoday-block-text .evtoday-heading {
+      font-family: 'Archivo Black', sans-serif;
+      font-size: 20px;
+      margin-bottom: 8px;
+      color: #F4F1FF;
+    }
+    .evtoday-block-text p { font-size: 15px; line-height: 1.65; opacity: 0.85; margin: 0; }
+
+    .evtoday-image img, .evtoday-video video, .evtoday-video iframe {
+      width: 100%; border-radius: 14px; display: block; background: #000;
+    }
+    .evtoday-caption { font-size: 12.5px; opacity: 0.55; margin-top: 8px; text-align: center; }
+
+    .evtoday-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: linear-gradient(90deg, #FF7A45, #FF9E5E);
+      color: #1A0F06; font-weight: 800; font-size: 10.5px; letter-spacing: 0.05em;
+      text-transform: uppercase; padding: 4px 10px; border-radius: 999px; margin-bottom: 10px;
+    }
+    .evtoday-announce-title { font-family: 'Archivo Black', sans-serif; font-size: 19px; margin-bottom: 8px; color: #F4F1FF; }
+    .evtoday-announce-body { font-size: 14.5px; line-height: 1.6; opacity: 0.85; margin-bottom: 14px; }
+
+    .evtoday-btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 14px 18px; border-radius: 14px; border: none;
+      font-weight: 800; font-size: 14.5px; cursor: pointer; text-decoration: none;
+      touch-action: manipulation;
+    }
+    .evtoday-btn-primary { background: linear-gradient(90deg, #8B5CF6, #6D28D9); color: #FFFFFF; }
+    .evtoday-btn-secondary { background: transparent; border: 1.5px solid rgba(237,235,250,0.3); color: #EDEBFA; }
+    .evtoday-btn-orange { background: linear-gradient(90deg, #FF7A45, #F5590E); color: #1A0F06; }
+
+    .evtoday-poll-q { font-size: 15.5px; font-weight: 700; margin-bottom: 14px; color: #F4F1FF; }
+    .evtoday-poll-option {
+      position: relative;
+      width: 100%; text-align: left; padding: 12px 14px; margin-bottom: 8px;
+      border-radius: 12px; border: 1.5px solid rgba(183,156,255,0.25);
+      background: rgba(139,92,246,0.08); color: #EDEBFA; font-weight: 600; font-size: 14px;
+      cursor: pointer; overflow: hidden; touch-action: manipulation;
+    }
+    .evtoday-poll-fill {
+      position: absolute; inset: 0; background: rgba(139,92,246,0.28);
+      transition: width 0.5s ease; z-index: 0;
+    }
+    .evtoday-poll-option-inner { position: relative; z-index: 1; display: flex; justify-content: space-between; gap: 8px; }
+    .evtoday-poll-note { font-size: 11.5px; opacity: 0.5; margin-top: 4px; }
+
+    .evtoday-situation-title { font-family: 'Archivo Black', sans-serif; font-size: 18px; margin-bottom: 12px; color: #F4F1FF; }
+
+    .evtoday-empty {
+      text-align: center; padding: 60px 20px; opacity: 0.55; font-size: 14px;
+    }
+    .evtoday-fallback-note {
+      text-align: center; font-size: 11.5px; opacity: 0.45; margin: 0 20px 12px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+
+    /* Admin: Today's Page tab reuses the app's existing dark-green admin
+       chrome, with violet accents only where it directly represents the
+       new Today's Page content, so Admin still reads as one cohesive tool. */
+    .evrion-today-admin-block {
+      background: #1B2715;
+      border: 1px solid rgba(183,156,255,0.25);
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+    }
+    .evrion-today-type-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(183,156,255,0.15); color: #C4AEFF;
+      border-radius: 999px; padding: 3px 9px; font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .evrion-status-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .evrion-status-pill.published { background: rgba(46,111,78,0.35); color: #8FE0AF; }
+    .evrion-status-pill.draft { background: rgba(246,239,221,0.1); color: rgba(246,239,221,0.6); }
   `}</style>
 );
 
@@ -744,7 +892,7 @@ function ChatScene({ question }) {
 /*  Public views                                                       */
 /* ------------------------------------------------------------------ */
 
-function HomeView({ onStart, onAdmin }) {
+function HomeView({ onStart, onAdmin, onToday }) {
   return (
     <div className="evrion-scroll" style={{ display: "flex", flexDirection: "column", justifyContent: "center", minHeight: "100%" }}>
       <div style={{ textAlign: "center", marginBottom: 8 }}>
@@ -764,6 +912,14 @@ function HomeView({ onStart, onAdmin }) {
 
       <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={onStart}>
         Start the vibe check <ChevronRight size={17} />
+      </button>
+
+      <button
+        className="evrion-btn evrion-btn-secondary evrion-btn-block"
+        style={{ marginTop: 10 }}
+        onClick={onToday}
+      >
+        🗓 Today's Page
       </button>
 
       <button
@@ -943,6 +1099,239 @@ function SharedResultView({ personality, pct, onPlay }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Today's Page — content-driven daily front page                     */
+/*  Block types are defined once here; adding a new type later means   */
+/*  adding one entry to TODAY_BLOCK_TYPES plus one render case below —  */
+/*  nothing else about Today's Page needs to change.                   */
+/* ------------------------------------------------------------------ */
+
+const TODAY_BLOCK_TYPES = [
+  { type: "text", label: "Text" },
+  { type: "image", label: "Image" },
+  { type: "video", label: "Video" },
+  { type: "poll", label: "Poll" },
+  { type: "situation", label: "Situation" },
+  { type: "announcement", label: "Announcement / Feature" },
+  { type: "button", label: "Button / Link" },
+];
+
+function defaultBlockData(type) {
+  const base = { id: uid("blk"), type };
+  switch (type) {
+    case "text":
+      return { ...base, heading: "", body: "" };
+    case "image":
+      return { ...base, url: "", caption: "", alt: "" };
+    case "video":
+      return { ...base, url: "", caption: "" };
+    case "poll":
+      return { ...base, question: "", options: [{ id: uid("opt"), text: "" }, { id: uid("opt"), text: "" }] };
+    case "situation":
+      return { ...base, title: "", format: "quick", prompt: "", chat: [] };
+    case "announcement":
+      return { ...base, badge: "", title: "", body: "", ctaLabel: "", ctaUrl: "" };
+    case "button":
+      return { ...base, label: "", url: "", style: "primary" };
+    default:
+      return base;
+  }
+}
+
+function todaysDateString() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function videoEmbedUrl(url) {
+  if (!url) return null;
+  const yt = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w-]+)/);
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
+  const vimeo = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
+  return null;
+}
+
+function PollBlockPublic({ block, pageDate }) {
+  const [counts, setCounts] = useState(null);
+  const [votedOption, setVotedOption] = useState(() => {
+    try {
+      return localStorage.getItem(`evrion_voted_${block.id}`) || null;
+    } catch (e) {
+      return null;
+    }
+  });
+  const [busy, setBusy] = useState(false);
+
+  const refreshCounts = useCallback(async () => {
+    const c = await fetchVoteCounts(block.id);
+    setCounts(c);
+  }, [block.id]);
+
+  useEffect(() => {
+    if (votedOption) refreshCounts();
+  }, [votedOption, refreshCounts]);
+
+  const vote = async (optionId) => {
+    if (votedOption || busy) return;
+    setBusy(true);
+    try {
+      await castVote(pageDate, block.id, optionId);
+      try {
+        localStorage.setItem(`evrion_voted_${block.id}`, optionId);
+      } catch (e) {
+        /* ignore */
+      }
+      setVotedOption(optionId);
+    } catch (e) {
+      /* silently ignore — voting is a nice-to-have, not critical */
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const total = counts ? Object.values(counts).reduce((s, n) => s + n, 0) : 0;
+
+  return (
+    <div className="evtoday-block">
+      <div className="evtoday-poll-q">{block.question}</div>
+      {(block.options || []).map((opt) => {
+        const optCount = counts?.[opt.id] || 0;
+        const pct = total > 0 ? Math.round((optCount / total) * 100) : 0;
+        return (
+          <button key={opt.id} className="evtoday-poll-option" onClick={() => vote(opt.id)} disabled={!!votedOption}>
+            {votedOption && <div className="evtoday-poll-fill" style={{ width: `${pct}%` }} />}
+            <div className="evtoday-poll-option-inner">
+              <span>{opt.text}</span>
+              {votedOption && <span>{pct}%</span>}
+            </div>
+          </button>
+        );
+      })}
+      <div className="evtoday-poll-note">
+        {votedOption ? `${total} vote${total !== 1 ? "s" : ""} so far` : "Tap to vote"}
+      </div>
+    </div>
+  );
+}
+
+function TodayBlockPublic({ block, pageDate, onNavigate }) {
+  switch (block.type) {
+    case "text":
+      return (
+        <div className="evtoday-block evtoday-block-text">
+          {block.heading && <div className="evtoday-heading">{block.heading}</div>}
+          <p>{block.body}</p>
+        </div>
+      );
+    case "image":
+      return (
+        <div className="evtoday-block evtoday-image">
+          {block.url && <img src={block.url} alt={block.alt || ""} />}
+          {block.caption && <div className="evtoday-caption">{block.caption}</div>}
+        </div>
+      );
+    case "video": {
+      const embed = videoEmbedUrl(block.url);
+      return (
+        <div className="evtoday-block evtoday-video">
+          {embed ? (
+            <iframe
+              src={embed}
+              title={block.caption || "video"}
+              style={{ aspectRatio: "16/9" }}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          ) : block.url ? (
+            <video src={block.url} controls style={{ aspectRatio: "16/9" }} />
+          ) : null}
+          {block.caption && <div className="evtoday-caption">{block.caption}</div>}
+        </div>
+      );
+    }
+    case "poll":
+      return <PollBlockPublic block={block} pageDate={pageDate} />;
+    case "situation":
+      return (
+        <div className="evtoday-block">
+          {block.title && <div className="evtoday-situation-title">{block.title}</div>}
+          <ChatScene question={{ id: block.id, format: block.format, chat: block.chat, prompt: "" }} />
+          {block.prompt && <div style={{ fontSize: 14.5, fontWeight: 700, opacity: 0.9, color: "#F4F1FF" }}>{block.prompt}</div>}
+        </div>
+      );
+    case "announcement":
+      return (
+        <div className="evtoday-block">
+          {block.badge && <div className="evtoday-badge">{block.badge}</div>}
+          {block.title && <div className="evtoday-announce-title">{block.title}</div>}
+          {block.body && <div className="evtoday-announce-body">{block.body}</div>}
+          {block.ctaLabel && (
+            <button
+              className="evtoday-btn evtoday-btn-orange"
+              onClick={() => (block.ctaUrl ? window.open(block.ctaUrl, "_blank") : onNavigate?.())}
+            >
+              {block.ctaLabel} <ChevronRight size={16} />
+            </button>
+          )}
+        </div>
+      );
+    case "button":
+      return (
+        <div style={{ margin: "0 20px 16px" }}>
+          <a
+            className={`evtoday-btn ${block.style === "secondary" ? "evtoday-btn-secondary" : "evtoday-btn-primary"}`}
+            href={block.url || "#"}
+            target={block.url?.startsWith("http") ? "_blank" : undefined}
+            rel="noreferrer"
+          >
+            {block.label || "Tap here"}
+          </a>
+        </div>
+      );
+    default:
+      return null;
+  }
+}
+
+function TodayPageView({ content, onBack, onGoCategories }) {
+  const pages = content.todayPages || [];
+  const todayStr = todaysDateString();
+
+  const exact = pages.find((p) => p.date === todayStr && p.status === "published");
+  const fallback = !exact
+    ? pages
+        .filter((p) => p.status === "published" && p.date <= todayStr)
+        .sort((a, b) => (a.date < b.date ? 1 : -1))[0]
+    : null;
+  const page = exact || fallback;
+
+  return (
+    <div className="evtoday-root" style={{ minHeight: "100%", display: "flex", flexDirection: "column" }}>
+      <TopBar onBack={onBack} title="" />
+      <div className="evtoday-header">
+        <div className="evtoday-eyebrow">Today's Page</div>
+        <div className="evrion-wordmark" style={{ fontSize: 22, color: "#EDEBFA" }}>EVRION</div>
+      </div>
+
+      {!page && (
+        <div className="evtoday-empty">Nothing here yet — check back soon.</div>
+      )}
+
+      {page && !exact && (
+        <div className="evtoday-fallback-note">Showing {page.date}'s page</div>
+      )}
+
+      {page && (
+        <div style={{ paddingTop: 8, paddingBottom: 24 }}>
+          {(page.blocks || []).map((block) => (
+            <TodayBlockPublic key={block.id} block={block} pageDate={page.date} onNavigate={onGoCategories} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Admin                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -1005,10 +1394,10 @@ function AdminLogin({ onBack, onSuccess }) {
   );
 }
 
-const ADMIN_TABS = ["Categories", "Questions", "Traits", "Personalities"];
+const ADMIN_TABS = ["Today's Page", "Categories", "Questions", "Traits", "Personalities"];
 
 function AdminDashboard({ content, setContent, connected, synced, onInitialize, onBack, onLogout }) {
-  const [tab, setTab] = useState("Categories");
+  const [tab, setTab] = useState("Today's Page");
   const [modal, setModal] = useState(null);
   const [saveError, setSaveError] = useState("");
 
@@ -1071,6 +1460,7 @@ function AdminDashboard({ content, setContent, connected, synced, onInitialize, 
           ))}
         </div>
 
+        {tab === "Today's Page" && <TodayPageTab content={content} save={save} />}
         {tab === "Categories" && <CategoriesTab content={content} save={save} setModal={setModal} />}
         {tab === "Questions" && <QuestionsTab content={content} save={save} setModal={setModal} />}
         {tab === "Traits" && <TraitsTab content={content} save={save} setModal={setModal} />}
@@ -1088,6 +1478,368 @@ function SectionHeader({ label, onAdd }) {
       <div style={{ fontSize: 13, fontWeight: 800, opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.03em" }}>{label}</div>
       <button className="evrion-icon-btn" onClick={onAdd}><Plus size={16} /></button>
     </div>
+  );
+}
+
+function TodayPageTab({ content, save }) {
+  const pages = content.todayPages || [];
+  const [date, setDate] = useState(todaysDateString());
+  const existing = pages.find((p) => p.date === date);
+  const [blocks, setBlocks] = useState(existing?.blocks || []);
+  const [status, setStatus] = useState(existing?.status || "draft");
+  const [blockModal, setBlockModal] = useState(null); // { block, isNew }
+  const [showPreview, setShowPreview] = useState(false);
+  const [addPicker, setAddPicker] = useState(false);
+  const [savedFlash, setSavedFlash] = useState("");
+
+  // When the selected date changes, load that date's existing page (or start blank).
+  const switchDate = (newDate) => {
+    setDate(newDate);
+    const found = pages.find((p) => p.date === newDate);
+    setBlocks(found?.blocks || []);
+    setStatus(found?.status || "draft");
+  };
+
+  const persistPage = (nextBlocks, nextStatus) => {
+    const pageId = existing?.id || uid("tp");
+    const nextPage = { id: pageId, date, status: nextStatus, blocks: nextBlocks };
+    const others = pages.filter((p) => p.date !== date);
+    save({ ...content, todayPages: [...others, nextPage] });
+  };
+
+  const saveDraft = () => {
+    persistPage(blocks, status === "published" ? "published" : "draft");
+    setSavedFlash("Saved");
+    setTimeout(() => setSavedFlash(""), 1800);
+  };
+
+  const publish = () => {
+    setStatus("published");
+    persistPage(blocks, "published");
+    setSavedFlash("Published!");
+    setTimeout(() => setSavedFlash(""), 1800);
+  };
+
+  const unpublish = () => {
+    setStatus("draft");
+    persistPage(blocks, "draft");
+  };
+
+  const addBlock = (type) => {
+    setAddPicker(false);
+    setBlockModal({ block: defaultBlockData(type), isNew: true });
+  };
+
+  const editBlock = (block) => setBlockModal({ block, isNew: false });
+
+  const saveBlockFromModal = (updatedBlock) => {
+    const exists = blocks.some((b) => b.id === updatedBlock.id);
+    setBlocks(exists ? blocks.map((b) => (b.id === updatedBlock.id ? updatedBlock : b)) : [...blocks, updatedBlock]);
+    setBlockModal(null);
+  };
+
+  const removeBlock = (id) => {
+    if (!confirm("Remove this block from the page?")) return;
+    setBlocks(blocks.filter((b) => b.id !== id));
+  };
+
+  const moveBlock = (idx, dir) => {
+    const next = blocks.slice();
+    const target = idx + dir;
+    if (target < 0 || target >= next.length) return;
+    [next[idx], next[target]] = [next[target], next[idx]];
+    setBlocks(next);
+  };
+
+  const otherDates = pages
+    .map((p) => ({ date: p.date, status: p.status }))
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  const previewPage = { date, status, blocks };
+
+  return (
+    <div>
+      <div className="evrion-field">
+        <label className="evrion-label">Editing page for</label>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="date" className="evrion-input" value={date} onChange={(e) => switchDate(e.target.value)} />
+          <span className={`evrion-status-pill ${status === "published" ? "published" : "draft"}`}>
+            {status === "published" ? "Live" : "Draft"}
+          </span>
+        </div>
+        {otherDates.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+            {otherDates.map((p) => (
+              <button
+                key={p.date}
+                className="evrion-tab"
+                style={{ fontSize: 11.5, padding: "5px 10px" }}
+                onClick={() => switchDate(p.date)}
+              >
+                {p.date} {p.status === "published" ? "🟢" : "⚪"}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <SectionHeader label={`Blocks (${blocks.length})`} onAdd={() => setAddPicker(true)} />
+
+      {blocks.length === 0 && <div className="evrion-empty">No blocks yet — tap + to add one.</div>}
+
+      {blocks.map((b, idx) => {
+        const meta = TODAY_BLOCK_TYPES.find((t) => t.type === b.type);
+        const snippet = b.title || b.heading || b.question || b.body || b.label || b.caption || "(untitled)";
+        return (
+          <div className="evrion-today-admin-block" key={b.id}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+              <div style={{ minWidth: 0 }}>
+                <span className="evrion-today-type-tag">{meta?.label || b.type}</span>
+                <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {snippet}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                <button className="evrion-icon-btn" onClick={() => moveBlock(idx, -1)} disabled={idx === 0}><ChevronLeft size={13} style={{ transform: "rotate(90deg)" }} /></button>
+                <button className="evrion-icon-btn" onClick={() => moveBlock(idx, 1)} disabled={idx === blocks.length - 1}><ChevronLeft size={13} style={{ transform: "rotate(-90deg)" }} /></button>
+                <button className="evrion-icon-btn" onClick={() => editBlock(b)}><Pencil size={13} /></button>
+                <button className="evrion-icon-btn danger" onClick={() => removeBlock(b.id)}><Trash2 size={13} /></button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      <div style={{ display: "flex", gap: 8, marginTop: 18, flexWrap: "wrap" }}>
+        <button className="evrion-btn evrion-btn-secondary" style={{ flex: 1 }} onClick={() => setShowPreview(true)}>Preview</button>
+        <button className="evrion-btn evrion-btn-secondary" style={{ flex: 1 }} onClick={saveDraft}>Save draft</button>
+        {status === "published" ? (
+          <button className="evrion-btn evrion-btn-danger" style={{ flex: 1 }} onClick={unpublish}>Unpublish</button>
+        ) : (
+          <button className="evrion-btn evrion-btn-primary" style={{ flex: 1 }} onClick={publish}>Publish</button>
+        )}
+      </div>
+      {savedFlash && <div style={{ textAlign: "center", fontSize: 12.5, color: "#E7B10A", marginTop: 8, fontWeight: 700 }}>{savedFlash}</div>}
+
+      {addPicker && (
+        <ModalShell title="Add a block" close={() => setAddPicker(false)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {TODAY_BLOCK_TYPES.map((t) => (
+              <button key={t.type} className="evrion-answer" onClick={() => addBlock(t.type)}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </ModalShell>
+      )}
+
+      {blockModal && (
+        <TodayBlockEditModal
+          block={blockModal.block}
+          close={() => setBlockModal(null)}
+          onSave={saveBlockFromModal}
+        />
+      )}
+
+      {showPreview && (
+        <div className="evrion-modal-backdrop" onClick={() => setShowPreview(false)}>
+          <div className="evrion-modal" style={{ padding: 0, background: "transparent" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "flex-end", padding: "14px 14px 0" }}>
+              <button className="evrion-icon-btn" onClick={() => setShowPreview(false)} style={{ background: "rgba(0,0,0,0.4)" }}>
+                <X size={16} />
+              </button>
+            </div>
+            <div className="evtoday-root" style={{ borderRadius: 20, overflow: "hidden", maxHeight: "75vh", overflowY: "auto" }}>
+              <div className="evtoday-header">
+                <div className="evtoday-eyebrow">Preview</div>
+                <div className="evrion-wordmark" style={{ fontSize: 20, color: "#EDEBFA" }}>EVRION</div>
+              </div>
+              <div style={{ paddingTop: 8, paddingBottom: 24 }}>
+                {previewPage.blocks.map((block) => (
+                  <TodayBlockPublic key={block.id} block={block} pageDate={previewPage.date} onNavigate={() => {}} />
+                ))}
+                {previewPage.blocks.length === 0 && <div className="evtoday-empty">No blocks yet.</div>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TodayBlockEditModal({ block, close, onSave }) {
+  const [draft, setDraft] = useState(block);
+  const set = (patch) => setDraft({ ...draft, ...patch });
+
+  const meta = TODAY_BLOCK_TYPES.find((t) => t.type === draft.type);
+
+  const updateOption = (idx, text) =>
+    set({ options: draft.options.map((o, i) => (i === idx ? { ...o, text } : o)) });
+  const addOption = () => set({ options: [...draft.options, { id: uid("opt"), text: "" }] });
+  const removeOption = (idx) => set({ options: draft.options.filter((_, i) => i !== idx) });
+
+  const updateChatLine = (idx, patch) => set({ chat: draft.chat.map((l, i) => (i === idx ? { ...l, ...patch } : l)) });
+  const addChatLine = () => set({ chat: [...(draft.chat || []), { from: "them", text: "" }] });
+  const removeChatLine = (idx) => set({ chat: draft.chat.filter((_, i) => i !== idx) });
+
+  const submit = () => onSave(draft);
+
+  return (
+    <ModalShell title={`${meta?.label || draft.type} block`} close={close}>
+      {draft.type === "text" && (
+        <>
+          <div className="evrion-field">
+            <label className="evrion-label">Heading (optional)</label>
+            <input className="evrion-input" value={draft.heading} onChange={(e) => set({ heading: e.target.value })} />
+          </div>
+          <div className="evrion-field">
+            <label className="evrion-label">Body</label>
+            <textarea className="evrion-textarea" value={draft.body} onChange={(e) => set({ body: e.target.value })} />
+          </div>
+        </>
+      )}
+
+      {draft.type === "image" && (
+        <>
+          <div className="evrion-field">
+            <label className="evrion-label">Image URL</label>
+            <input className="evrion-input" value={draft.url} onChange={(e) => set({ url: e.target.value })} placeholder="https://..." />
+          </div>
+          <div className="evrion-field">
+            <label className="evrion-label">Caption (optional)</label>
+            <input className="evrion-input" value={draft.caption} onChange={(e) => set({ caption: e.target.value })} />
+          </div>
+          <div className="evrion-field">
+            <label className="evrion-label">Alt text (optional)</label>
+            <input className="evrion-input" value={draft.alt} onChange={(e) => set({ alt: e.target.value })} />
+          </div>
+        </>
+      )}
+
+      {draft.type === "video" && (
+        <>
+          <div className="evrion-field">
+            <label className="evrion-label">Video URL (YouTube, Vimeo, or direct .mp4 link)</label>
+            <input className="evrion-input" value={draft.url} onChange={(e) => set({ url: e.target.value })} placeholder="https://youtube.com/watch?v=..." />
+          </div>
+          <div className="evrion-field">
+            <label className="evrion-label">Caption (optional)</label>
+            <input className="evrion-input" value={draft.caption} onChange={(e) => set({ caption: e.target.value })} />
+          </div>
+        </>
+      )}
+
+      {draft.type === "poll" && (
+        <>
+          <div className="evrion-field">
+            <label className="evrion-label">Question</label>
+            <input className="evrion-input" value={draft.question} onChange={(e) => set({ question: e.target.value })} />
+          </div>
+          <div className="evrion-field">
+            <label className="evrion-label">Options</label>
+            {draft.options.map((o, idx) => (
+              <div key={o.id} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                <input className="evrion-input" value={o.text} onChange={(e) => updateOption(idx, e.target.value)} placeholder={`Option ${idx + 1}`} />
+                <button className="evrion-icon-btn danger" onClick={() => removeOption(idx)} disabled={draft.options.length <= 2}>
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+            <button className="evrion-btn evrion-btn-secondary" style={{ fontSize: 12.5, padding: "8px 12px" }} onClick={addOption}>
+              <Plus size={13} /> Add option
+            </button>
+          </div>
+        </>
+      )}
+
+      {draft.type === "situation" && (
+        <>
+          <div className="evrion-field">
+            <label className="evrion-label">Title</label>
+            <input className="evrion-input" value={draft.title} onChange={(e) => set({ title: e.target.value })} />
+          </div>
+          <div className="evrion-field">
+            <label className="evrion-label">Format</label>
+            <select className="evrion-select" value={draft.format} onChange={(e) => set({ format: e.target.value })}>
+              <option value="chat">Chat — message bubbles</option>
+              <option value="scene">Scene — narrated text</option>
+              <option value="quick">Quick — no scene</option>
+            </select>
+          </div>
+          {draft.format !== "quick" && (
+            <div className="evrion-field">
+              <label className="evrion-label">Scene lines</label>
+              {(draft.chat || []).map((line, idx) => (
+                <div key={idx} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                  <select className="evrion-select" style={{ width: 88, flexShrink: 0 }} value={line.from} onChange={(e) => updateChatLine(idx, { from: e.target.value })}>
+                    <option value="them">Them</option>
+                    <option value="you">You</option>
+                    <option value="system">Note</option>
+                  </select>
+                  <input className="evrion-input" value={line.text} onChange={(e) => updateChatLine(idx, { text: e.target.value })} placeholder="Line text" />
+                  <button className="evrion-icon-btn danger" onClick={() => removeChatLine(idx)}><Trash2 size={13} /></button>
+                </div>
+              ))}
+              <button className="evrion-btn evrion-btn-secondary" style={{ fontSize: 12.5, padding: "8px 12px" }} onClick={addChatLine}>
+                <Plus size={13} /> Add line
+              </button>
+            </div>
+          )}
+          <div className="evrion-field">
+            <label className="evrion-label">Prompt / caption below the scene</label>
+            <input className="evrion-input" value={draft.prompt} onChange={(e) => set({ prompt: e.target.value })} />
+          </div>
+        </>
+      )}
+
+      {draft.type === "announcement" && (
+        <>
+          <div className="evrion-field">
+            <label className="evrion-label">Badge (optional, e.g. "NEW")</label>
+            <input className="evrion-input" value={draft.badge} onChange={(e) => set({ badge: e.target.value })} />
+          </div>
+          <div className="evrion-field">
+            <label className="evrion-label">Title</label>
+            <input className="evrion-input" value={draft.title} onChange={(e) => set({ title: e.target.value })} />
+          </div>
+          <div className="evrion-field">
+            <label className="evrion-label">Body</label>
+            <textarea className="evrion-textarea" value={draft.body} onChange={(e) => set({ body: e.target.value })} />
+          </div>
+          <div className="evrion-field">
+            <label className="evrion-label">Button label (optional)</label>
+            <input className="evrion-input" value={draft.ctaLabel} onChange={(e) => set({ ctaLabel: e.target.value })} />
+          </div>
+          <div className="evrion-field">
+            <label className="evrion-label">Button link (optional — leave blank to link to the quiz)</label>
+            <input className="evrion-input" value={draft.ctaUrl} onChange={(e) => set({ ctaUrl: e.target.value })} placeholder="https://..." />
+          </div>
+        </>
+      )}
+
+      {draft.type === "button" && (
+        <>
+          <div className="evrion-field">
+            <label className="evrion-label">Label</label>
+            <input className="evrion-input" value={draft.label} onChange={(e) => set({ label: e.target.value })} />
+          </div>
+          <div className="evrion-field">
+            <label className="evrion-label">Link URL</label>
+            <input className="evrion-input" value={draft.url} onChange={(e) => set({ url: e.target.value })} placeholder="https://..." />
+          </div>
+          <div className="evrion-field">
+            <label className="evrion-label">Style</label>
+            <select className="evrion-select" value={draft.style} onChange={(e) => set({ style: e.target.value })}>
+              <option value="primary">Primary (violet)</option>
+              <option value="secondary">Secondary (outline)</option>
+            </select>
+          </div>
+        </>
+      )}
+
+      <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={submit}>Save block</button>
+    </ModalShell>
   );
 }
 
@@ -1653,7 +2405,17 @@ export default function App() {
     <div className="evrion-root">
       <GlobalStyle />
       <div className="evrion-shell">
-        {view === "home" && <HomeView onStart={() => setView("categories")} onAdmin={() => setView(adminLoggedIn ? "adminHome" : "adminLogin")} />}
+        {view === "home" && (
+          <HomeView
+            onStart={() => setView("categories")}
+            onAdmin={() => setView(adminLoggedIn ? "adminHome" : "adminLogin")}
+            onToday={() => setView("today")}
+          />
+        )}
+
+        {view === "today" && (
+          <TodayPageView content={content} onBack={goHome} onGoCategories={() => setView("categories")} />
+        )}
 
         {view === "shared" && sharedResult && (
           <SharedResultView personality={sharedResult.personality} pct={sharedResult.pct} onPlay={goHome} />

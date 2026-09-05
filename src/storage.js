@@ -40,3 +40,27 @@ export async function getSession() {
   const { data } = await supabase.auth.getSession();
   return data.session;
 }
+
+/** Casts one anonymous vote on a Today's Page poll block. No login required. */
+export async function castVote(pageDate, blockId, optionId) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const { error } = await supabase
+    .from("today_page_votes")
+    .insert({ page_date: pageDate, block_id: blockId, option_id: optionId });
+  if (error) throw error;
+}
+
+/** Returns { [optionId]: count } for a given poll block. */
+export async function fetchVoteCounts(blockId) {
+  if (!supabase) return {};
+  const { data, error } = await supabase
+    .from("today_page_votes")
+    .select("option_id")
+    .eq("block_id", blockId);
+  if (error || !data) return {};
+  const counts = {};
+  data.forEach((row) => {
+    counts[row.option_id] = (counts[row.option_id] || 0) + 1;
+  });
+  return counts;
+}
