@@ -28,6 +28,7 @@ done through a website UI, not the command line, except two `npm` commands.
    - `supabase-today-media-bucket.sql` — storage for direct image/video uploads on Today's Page
    - `supabase-community-submissions.sql` — community-submitted situations + their optional photo uploads
    - `supabase-feedback.sql` — the feedback system
+   - `supabase-analytics.sql` — the analytics event-tracking foundation
 6. Go to **Authentication → Users → Add user** and create yourself an account
    (your email + a password). This is your one admin login — don't enable public
    sign-ups anywhere.
@@ -181,6 +182,37 @@ Feedback is deliberately a separate table and separate admin section from
 Community Situations — one is product feedback, the other is content people
 want to contribute — even though both follow the same "many independent
 records, not one shared status" shape under the hood.
+
+## Analytics (V1.1)
+
+Admin → **Analytics** is a small, honest dashboard — not a full analytics
+platform. Pick a range (Today / Last 7 days / Last 30 days / All time) and
+it shows: total page views, unique visitors, sessions, quiz starts and
+completions with a completion rate, Today's Page views, and community
+submissions — followed by new-vs-returning visitors, the most-played
+situations, Today's Page's most-viewed posts, Community's current
+pending/approved/rejected totals, and Feedback broken down by type with an
+average rating.
+
+Under the hood, EVRION records eight specific events as they actually
+happen — `page_view`, `session_started`, `quiz_started`, `quiz_completed`,
+`situation_played`, `today_page_viewed`, `community_submission`,
+`feedback_submitted` — each with its own timestamp, into its own Supabase
+table. Nothing on the dashboard is hardcoded or estimated; every number is
+computed live from those real recorded events for whichever range you've
+selected. Recording an event never blocks the app or shows an error if it
+fails — analytics is a passenger, never load-bearing.
+
+A visitor is identified only by a random, anonymous id stored in their own
+browser (the same lightweight approach already used for poll votes) — good
+enough to tell new visitors from returning ones and to avoid double-counting
+a page refresh as a new session, without adding any real account system.
+Device info recorded with feedback is just the browser's own user-agent
+string — nothing more identifying is collected anywhere in this system.
+
+Adding a new metric later mostly means adding one more small aggregation
+over the existing event log — the event vocabulary and table are built to
+be extended, not replaced.
 
 ## Editing the quiz after launch
 
