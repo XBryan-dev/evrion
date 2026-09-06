@@ -169,3 +169,45 @@ export async function deleteSubmission(id) {
   const { error } = await supabase.from("community_submissions").delete().eq("id", id);
   if (error) throw error;
 }
+
+/** Submits one feedback item. Always lands as "new" — independent from community submissions. */
+export async function submitFeedback({ type, message, rating, pageContext, deviceInfo }) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const { error } = await supabase.from("feedback_items").insert({
+    type,
+    message,
+    rating: rating ?? null,
+    page_context: pageContext || null,
+    device_info: deviceInfo || null,
+    status: "new",
+  });
+  if (error) throw error;
+}
+
+/** Admin-only: every feedback item, regardless of status. */
+export async function fetchFeedback() {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("feedback_items")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return data;
+}
+
+/** Admin-only: updates exactly one feedback item (status change, typically). */
+export async function updateFeedback(id, patch) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const { error } = await supabase
+    .from("feedback_items")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/** Admin-only: deletes exactly one feedback item. */
+export async function deleteFeedback(id) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const { error } = await supabase.from("feedback_items").delete().eq("id", id);
+  if (error) throw error;
+}

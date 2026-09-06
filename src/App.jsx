@@ -14,6 +14,8 @@ import {
   LogOut,
   CloudOff,
   UploadCloud,
+  MessageCircle,
+  Search,
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import {
@@ -32,6 +34,10 @@ import {
   fetchSubmissions,
   updateSubmission,
   deleteSubmission,
+  submitFeedback,
+  fetchFeedback,
+  updateFeedback,
+  deleteFeedback,
 } from "./storage";
 
 /* ------------------------------------------------------------------ */
@@ -728,6 +734,43 @@ const GlobalStyle = () => (
       text-align: center; padding: 40px 16px; color: rgba(246,239,221,0.5); font-size: 14px;
     }
 
+    /* Floating feedback trigger — visible across the app without blocking anything */
+    .evrion-fab {
+      position: absolute;
+      bottom: 18px;
+      right: 18px;
+      z-index: 40;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #E7B10A;
+      color: #12190F;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      touch-action: manipulation;
+    }
+    .evrion-fab:active { transform: scale(0.94); }
+
+    .evrion-rating-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .evrion-rating-btn {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: #12190F; border: 1.5px solid rgba(246,239,221,0.18);
+      color: #F6EFDD; font-size: 13px; font-weight: 700; cursor: pointer;
+      touch-action: manipulation;
+    }
+    .evrion-rating-btn.selected { background: #E7B10A; border-color: #E7B10A; color: #12190F; }
+
+    .evrion-type-pill {
+      padding: 9px 13px; border-radius: 999px; font-size: 13px; font-weight: 700;
+      border: 1.5px solid rgba(246,239,221,0.18); background: transparent; color: rgba(246,239,221,0.8);
+      cursor: pointer; touch-action: manipulation;
+    }
+    .evrion-type-pill.selected { background: #2E6F4E; border-color: #2E6F4E; color: #FFFFFF; }
+
     /* ---------------------------------------------------------------- */
     /*  Today's Page — EVRION's new visual direction: midnight + violet  */
     /*  + controlled warm orange. Scoped to .evtoday- so the rest of the */
@@ -837,6 +880,8 @@ const GlobalStyle = () => (
     }
     .evrion-status-pill.published { background: rgba(46,111,78,0.35); color: #8FE0AF; }
     .evrion-status-pill.draft { background: rgba(246,239,221,0.1); color: rgba(246,239,221,0.6); }
+    .evrion-status-pill.reviewing { background: rgba(231,177,10,0.25); color: #E7B10A; }
+    .evrion-status-pill.dismissed { background: rgba(193,68,46,0.25); color: #E9967A; }
   `}</style>
 );
 
@@ -1574,6 +1619,143 @@ function SubmitSituationView({ onBack }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Feedback — a lightweight, always-available way to hear from people  */
+/*  Every submission is an independent record in its own table, kept   */
+/*  entirely separate from Community Situations (product feedback vs.  */
+/*  content submissions are different things).                        */
+/* ------------------------------------------------------------------ */
+
+const FEEDBACK_TYPES = [
+  { id: "bug", label: "🐛 Bug" },
+  { id: "suggestion", label: "💡 Suggestion" },
+  { id: "complaint", label: "😕 Complaint" },
+  { id: "liked", label: "❤️ Liked something" },
+  { id: "general", label: "💬 General" },
+];
+
+function FloatingFeedbackButton({ currentView, onOpenChange }) {
+  const [open, setOpen] = useState(false);
+
+  const toggle = (v) => {
+    setOpen(v);
+    onOpenChange?.(v);
+  };
+
+  return (
+    <>
+      <button className="evrion-fab" onClick={() => toggle(true)} aria-label="Give feedback">
+        <MessageCircle size={22} />
+      </button>
+      {open && <FeedbackModal pageContext={currentView} close={() => toggle(false)} />}
+    </>
+  );
+}
+
+function FeedbackModal({ pageContext, close }) {
+  const [type, setType] = useState("general");
+  const [message, setMessage] = useState("");
+  const [rating, setRating] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+
+  const isValid = message.trim().length > 0;
+
+  const submit = async () => {
+    if (!isValid || submitting) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await submitFeedback({
+        type,
+        message: message.trim(),
+        rating,
+        pageContext,
+        deviceInfo: typeof navigator !== "undefined" ? navigator.userAgent : "",
+      });
+      setDone(true);
+    } catch (e) {
+      setError(e.message || "Couldn't send that just now — try again in a moment.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="evrion-modal-backdrop" onClick={close}>
+      <div className="evrion-modal" onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div style={{ fontFamily: "'Archivo Black', sans-serif", fontSize: 17 }}>
+            {done ? "Thanks!" : "Feedback"}
+          </div>
+          <button className="evrion-icon-btn" onClick={close}><X size={16} /></button>
+        </div>
+
+        {done ? (
+          <div style={{ textAlign: "center", padding: "10px 0 6px" }}>
+            <div style={{ fontSize: 40, marginBottom: 10 }}>🙏</div>
+            <p style={{ fontSize: 14.5, opacity: 0.85, lineHeight: 1.6, marginBottom: 20 }}>
+              Thanks for the feedback. It helps us improve EVRION.
+            </p>
+            <button className="evrion-btn evrion-btn-secondary evrion-btn-block" onClick={close}>Close</button>
+          </div>
+        ) : (
+          <>
+            <div className="evrion-field">
+              <label className="evrion-label">What kind of feedback is this?</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {FEEDBACK_TYPES.map((t) => (
+                  <button
+                    key={t.id}
+                    className={`evrion-type-pill ${type === t.id ? "selected" : ""}`}
+                    onClick={() => setType(t.id)}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="evrion-field">
+              <label className="evrion-label">Tell us what's on your mind</label>
+              <textarea
+                className="evrion-textarea"
+                style={{ minHeight: 90 }}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="What happened, or what would make EVRION better?"
+                maxLength={1000}
+              />
+            </div>
+
+            <div className="evrion-field">
+              <label className="evrion-label">Rate EVRION overall (optional)</label>
+              <div className="evrion-rating-row">
+                {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                  <button
+                    key={n}
+                    className={`evrion-rating-btn ${rating === n ? "selected" : ""}`}
+                    onClick={() => setRating(rating === n ? null : n)}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {error && <div style={{ color: "#E9967A", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+
+            <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={submit} disabled={!isValid || submitting}>
+              {submitting ? "Sending…" : "Send feedback"}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Admin                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -1636,7 +1818,7 @@ function AdminLogin({ onBack, onSuccess }) {
   );
 }
 
-const ADMIN_TABS = ["Today's Page", "Community", "Categories", "Questions", "Traits", "Personalities"];
+const ADMIN_TABS = ["Today's Page", "Community", "Feedback", "Categories", "Questions", "Traits", "Personalities"];
 
 function AdminDashboard({ content, setContent, connected, synced, onInitialize, onBack, onLogout }) {
   const [tab, setTab] = useState("Today's Page");
@@ -1704,6 +1886,7 @@ function AdminDashboard({ content, setContent, connected, synced, onInitialize, 
 
         {tab === "Today's Page" && <TodayPageTab content={content} save={save} />}
         {tab === "Community" && <CommunityTab />}
+        {tab === "Feedback" && <FeedbackTab />}
         {tab === "Categories" && <CategoriesTab content={content} save={save} setModal={setModal} />}
         {tab === "Questions" && <QuestionsTab content={content} save={save} setModal={setModal} />}
         {tab === "Traits" && <TraitsTab content={content} save={save} setModal={setModal} />}
@@ -2417,6 +2600,177 @@ function CommunityPreviewModal({ sub, close }) {
   );
 }
 
+function FeedbackTab() {
+  const [items, setItems] = useState(null); // null = loading
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [ratingFilter, setRatingFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [viewItem, setViewItem] = useState(null);
+  const [flash, setFlash] = useState("");
+
+  const load = useCallback(async () => {
+    const data = await fetchFeedback();
+    setItems(data);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const flashMsg = (msg) => {
+    setFlash(msg);
+    setTimeout(() => setFlash(""), 1600);
+  };
+
+  // Every action touches exactly one feedback item by id — everything else passes through untouched.
+  const setStatus = async (item, status) => {
+    try {
+      await updateFeedback(item.id, { status });
+      setItems(items.map((i) => (i.id === item.id ? { ...i, status } : i)));
+      flashMsg(`Marked ${status}`);
+    } catch (e) {
+      flashMsg(`Failed: ${e.message}`);
+    }
+  };
+
+  const remove = async (item) => {
+    if (!confirm("Delete this feedback item? This only removes this one.")) return;
+    try {
+      await deleteFeedback(item.id);
+      setItems(items.filter((i) => i.id !== item.id));
+      flashMsg("Deleted");
+    } catch (e) {
+      flashMsg(`Failed: ${e.message}`);
+    }
+  };
+
+  if (items === null) return <div className="evrion-empty">Loading feedback…</div>;
+
+  const filtered = items.filter((i) => {
+    if (typeFilter !== "all" && i.type !== typeFilter) return false;
+    if (statusFilter !== "all" && i.status !== statusFilter) return false;
+    if (ratingFilter !== "all") {
+      if (ratingFilter === "none" && i.rating != null) return false;
+      if (ratingFilter !== "none" && i.rating !== Number(ratingFilter)) return false;
+    }
+    if (dateFilter && i.created_at && i.created_at.slice(0, 10) !== dateFilter) return false;
+    if (search.trim() && !(i.message || "").toLowerCase().includes(search.trim().toLowerCase())) return false;
+    return true;
+  });
+
+  const statusCounts = { new: 0, reviewing: 0, resolved: 0, dismissed: 0 };
+  items.forEach((i) => { statusCounts[i.status] = (statusCounts[i.status] || 0) + 1; });
+
+  return (
+    <div>
+      <div className="evrion-tabs">
+        {["all", "new", "reviewing", "resolved", "dismissed"].map((s) => (
+          <button key={s} className={`evrion-tab ${statusFilter === s ? "active" : ""}`} onClick={() => setStatusFilter(s)}>
+            {s === "all" ? `All (${items.length})` : `${s[0].toUpperCase() + s.slice(1)} (${statusCounts[s] || 0})`}
+          </button>
+        ))}
+      </div>
+
+      <div className="evrion-field" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 140px" }}>
+          <label className="evrion-label">Type</label>
+          <select className="evrion-select" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+            <option value="all">All types</option>
+            {FEEDBACK_TYPES.map((t) => (
+              <option key={t.id} value={t.id}>{t.label}</option>
+            ))}
+          </select>
+        </div>
+        <div style={{ flex: "1 1 100px" }}>
+          <label className="evrion-label">Rating</label>
+          <select className="evrion-select" value={ratingFilter} onChange={(e) => setRatingFilter(e.target.value)}>
+            <option value="all">Any</option>
+            <option value="none">No rating</option>
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>{n}/10</option>
+            ))}
+          </select>
+        </div>
+        <div style={{ flex: "1 1 140px" }}>
+          <label className="evrion-label">Date</label>
+          <input type="date" className="evrion-input" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="evrion-field">
+        <label className="evrion-label">Search feedback text</label>
+        <div style={{ position: "relative" }}>
+          <input className="evrion-input" style={{ paddingLeft: 34 }} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." />
+          <Search size={15} style={{ position: "absolute", left: 10, top: 11, opacity: 0.4 }} />
+        </div>
+      </div>
+
+      {filtered.length === 0 && <div className="evrion-empty">No feedback matches these filters.</div>}
+
+      {filtered.map((item) => {
+        const meta = FEEDBACK_TYPES.find((t) => t.id === item.type);
+        return (
+          <div className="evrion-today-admin-block" key={item.id}>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
+              <span className="evrion-today-type-tag">{meta?.label || item.type}</span>
+              <span className={`evrion-status-pill ${item.status === "resolved" ? "published" : item.status === "reviewing" ? "reviewing" : item.status === "dismissed" ? "dismissed" : "draft"}`}>
+                {item.status}
+              </span>
+              {item.rating != null && <span className="evrion-chip">{item.rating}/10</span>}
+            </div>
+            <div style={{ fontSize: 13.5, lineHeight: 1.5, marginBottom: 6 }}>
+              {(item.message || "").slice(0, 140)}{(item.message || "").length > 140 ? "…" : ""}
+            </div>
+            <div style={{ fontSize: 11, opacity: 0.4 }}>
+              {item.created_at ? new Date(item.created_at).toLocaleString() : "—"} · {item.page_context || "unknown page"}
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+              <button className="evrion-btn evrion-btn-secondary" style={{ fontSize: 12, padding: "7px 11px" }} onClick={() => setViewItem(item)}>
+                View
+              </button>
+              {item.status !== "reviewing" && (
+                <button className="evrion-btn evrion-btn-secondary" style={{ fontSize: 12, padding: "7px 11px" }} onClick={() => setStatus(item, "reviewing")}>
+                  Mark Reviewing
+                </button>
+              )}
+              {item.status !== "resolved" && (
+                <button className="evrion-btn evrion-btn-primary" style={{ fontSize: 12, padding: "7px 11px" }} onClick={() => setStatus(item, "resolved")}>
+                  Mark Resolved
+                </button>
+              )}
+              {item.status !== "dismissed" && (
+                <button className="evrion-btn evrion-btn-danger" style={{ fontSize: 12, padding: "7px 11px" }} onClick={() => setStatus(item, "dismissed")}>
+                  Dismiss
+                </button>
+              )}
+              <button className="evrion-icon-btn danger" onClick={() => remove(item)} title="Delete"><Trash2 size={14} /></button>
+            </div>
+          </div>
+        );
+      })}
+
+      {flash && <div style={{ textAlign: "center", fontSize: 12.5, color: "#E7B10A", marginTop: 10, fontWeight: 700 }}>{flash}</div>}
+
+      {viewItem && (
+        <ModalShell title="Feedback detail" close={() => setViewItem(null)}>
+          <div className="evrion-field">
+            <span className="evrion-today-type-tag">{FEEDBACK_TYPES.find((t) => t.id === viewItem.type)?.label || viewItem.type}</span>
+            {viewItem.rating != null && <span className="evrion-chip" style={{ marginLeft: 6 }}>{viewItem.rating}/10</span>}
+          </div>
+          <p style={{ fontSize: 14.5, lineHeight: 1.6, opacity: 0.9, marginBottom: 14, whiteSpace: "pre-wrap" }}>{viewItem.message}</p>
+          <div style={{ fontSize: 12, opacity: 0.5, lineHeight: 1.6 }}>
+            <div>Submitted: {viewItem.created_at ? new Date(viewItem.created_at).toLocaleString() : "—"}</div>
+            <div>Page: {viewItem.page_context || "unknown"}</div>
+            {viewItem.device_info && <div>Device: {viewItem.device_info}</div>}
+          </div>
+        </ModalShell>
+      )}
+    </div>
+  );
+}
+
 function CategoriesTab({ content, save, setModal }) {
   const items = content.categories.slice().sort((a, b) => a.order - b.order);
   const remove = (id) => {
@@ -3054,6 +3408,10 @@ export default function App() {
               goHome();
             }}
           />
+        )}
+
+        {view !== "adminLogin" && view !== "adminHome" && (
+          <FloatingFeedbackButton currentView={view} />
         )}
       </div>
     </div>
