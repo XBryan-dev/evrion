@@ -40,7 +40,6 @@ import {
   deleteFeedback,
   trackEvent,
   fetchAnalyticsEvents,
-  getOrCreateVisitorId,
 } from "./storage";
 
 /* ------------------------------------------------------------------ */
@@ -798,6 +797,12 @@ const GlobalStyle = () => (
       opacity: 0.6;
       margin-top: 4px;
       font-weight: 700;
+    }
+    .evrion-stat-def {
+      font-size: 10px;
+      opacity: 0.4;
+      margin-top: 3px;
+      line-height: 1.3;
     }
     .evrion-analytics-section {
       margin-bottom: 22px;
@@ -1584,7 +1589,7 @@ function SubmitSituationView({ onBack }) {
         options: validOptions.map((text) => ({ id: uid("opt"), text })),
         imageUrl,
       });
-      trackEvent("community_submission", {});
+      trackEvent("community_submission", { title: form.title.trim() });
       setDone(true);
     } catch (e) {
       setError(e.message || "Couldn't submit that just now — try again in a moment.");
@@ -1736,7 +1741,7 @@ function FeedbackModal({ pageContext, close }) {
         pageContext,
         deviceInfo: typeof navigator !== "undefined" ? navigator.userAgent : "",
       });
-      trackEvent("feedback_submitted", { type, rating });
+      trackEvent("feedback_submitted", { type, rating, message: message.trim() });
       setDone(true);
     } catch (e) {
       setError(e.message || "Couldn't send that just now — try again in a moment.");
@@ -2697,18 +2702,25 @@ function AnalyticsTab({ content }) {
 
   const count = (type) => events.filter((e) => e.event_type === type).length;
 
-  const pageViews = count("page_view");
+  // --- The four concepts, kept strictly separate, per definition ---
   const uniqueVisitors = new Set(events.map((e) => e.visitor_id).filter(Boolean)).size;
-  const sessionEvents = events.filter((e) => e.event_type === "session_started");
-  const sessions = sessionEvents.length;
-  const newSessions = sessionEvents.filter((e) => e.metadata?.isNew).length;
-  const returningSessions = sessions - newSessions;
+  const sessions = new Set(events.map((e) => e.session_id).filter(Boolean)).size;
+  const pageViews = count("page_view");
+  const productEventTypes = ["quiz_started", "quiz_completed", "situation_played", "today_page_viewed", "community_submission", "feedback_submitted"];
+  const totalEvents = events.filter((e) => productEventTypes.includes(e.event_type)).length;
+
+  const sessionStartedRows = events.filter((e) => e.event_type === "session_started");
+  const newSessions = sessionStartedRows.filter((e) => e.metadata?.isNewVisitor).length;
+  const returningSessions = sessionStartedRows.length - newSessions;
 
   const quizStarts = count("quiz_started");
   const quizCompletions = count("quiz_completed");
   const completionRate = quizStarts > 0 ? Math.round((quizCompletions / quizStarts) * 100) : 0;
 
-  const todayPageViews = count("today_page_viewed");
+  const todayPageEvents = events.filter((e) => e.event_type === "today_page_viewed");
+  const todayPageViews = todayPageEvents.length;
+  const todayPageUniqueVisitors = new Set(todayPageEvents.map((e) => e.visitor_id).filter(Boolean)).size;
+
   const communitySubmissionEvents = count("community_submission");
 
   const feedbackEvents = events.filter((e) => e.event_type === "feedback_submitted");
@@ -2766,19 +2778,35 @@ function AnalyticsTab({ content }) {
       </div>
 
       <div className="evrion-stat-grid">
-        <div className="evrion-stat-card"><div className="evrion-stat-value">{pageViews}</div><div className="evrion-stat-label">Total page views</div></div>
-        <div className="evrion-stat-card"><div className="evrion-stat-value">{uniqueVisitors}</div><div className="evrion-stat-label">Unique visitors</div></div>
-        <div className="evrion-stat-card"><div className="evrion-stat-value">{sessions}</div><div className="evrion-stat-label">Sessions</div></div>
+        <div className="evrion-stat-card">
+          <div className="evrion-stat-value">{uniqueVisitors}</div>
+          <div className="evrion-stat-label">Unique visitors</div>
+          <div className="evrion-stat-def">Distinct anonymous visitor IDs</div>
+        </div>
+        <div className="evrion-stat-card">
+          <div className="evrion-stat-value">{sessions}</div>
+          <div className="evrion-stat-label">Sessions</div>
+          <div className="evrion-stat-def">Distinct sessions (30 min inactivity = new)</div>
+        </div>
+        <div className="evrion-stat-card">
+          <div className="evrion-stat-value">{pageViews}</div>
+          <div className="evrion-stat-label">Page views</div>
+          <div className="evrion-stat-def">Real screen navigations only</div>
+        </div>
+        <div className="evrion-stat-card">
+          <div className="evrion-stat-value">{totalEvents}</div>
+          <div className="evrion-stat-label">Events</div>
+          <div className="evrion-stat-def">Product interactions, not visitors</div>
+        </div>
         <div className="evrion-stat-card"><div className="evrion-stat-value">{quizStarts}</div><div className="evrion-stat-label">Quiz starts</div></div>
         <div className="evrion-stat-card"><div className="evrion-stat-value">{quizCompletions}</div><div className="evrion-stat-label">Quiz completions</div></div>
         <div className="evrion-stat-card"><div className="evrion-stat-value">{completionRate}%</div><div className="evrion-stat-label">Completion rate</div></div>
-        <div className="evrion-stat-card"><div className="evrion-stat-value">{todayPageViews}</div><div className="evrion-stat-label">Today's Page views</div></div>
         <div className="evrion-stat-card"><div className="evrion-stat-value">{communitySubmissionEvents}</div><div className="evrion-stat-label">Community submissions</div></div>
       </div>
 
-      {sessions > 0 && (
+      {sessionStartedRows.length > 0 && (
         <div className="evrion-analytics-section">
-          <div className="evrion-analytics-heading">Visitors</div>
+          <div className="evrion-analytics-heading">Visitors — new vs. returning</div>
           <div className="evrion-rank-row"><span>New</span><span>{newSessions}</span></div>
           <div className="evrion-rank-row"><span>Returning</span><span>{returningSessions}</span></div>
         </div>
@@ -2795,17 +2823,24 @@ function AnalyticsTab({ content }) {
         ))}
       </div>
 
-      {topPosts.length > 0 && (
-        <div className="evrion-analytics-section">
-          <div className="evrion-analytics-heading">Today's Page — most viewed posts</div>
-          {topPosts.map((p, i) => (
-            <div className="evrion-rank-row" key={p.id}>
-              <span>{i + 1}. {p.title}</span>
-              <span>{p.count} view{p.count !== 1 ? "s" : ""}</span>
+      <div className="evrion-analytics-section">
+        <div className="evrion-analytics-heading">Today's Page</div>
+        <div className="evrion-rank-row"><span>Page views</span><span>{todayPageViews}</span></div>
+        <div className="evrion-rank-row"><span>Unique visitors</span><span>{todayPageUniqueVisitors}</span></div>
+        {topPosts.length > 0 && (
+          <>
+            <div style={{ fontSize: 11.5, opacity: 0.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", margin: "12px 0 6px" }}>
+              Most viewed posts
             </div>
-          ))}
-        </div>
-      )}
+            {topPosts.map((p, i) => (
+              <div className="evrion-rank-row" key={p.id}>
+                <span>{i + 1}. {p.title}</span>
+                <span>{p.count} view{p.count !== 1 ? "s" : ""}</span>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
 
       <div className="evrion-analytics-section">
         <div className="evrion-analytics-heading">Community — current totals</div>
@@ -3480,18 +3515,12 @@ export default function App() {
         setAdminLoggedIn(!!session);
       }
 
-      // Fires once per real browser tab-session — the sessionStorage flag
-      // survives page refreshes within the same tab, so reloading never
-      // creates a second session_started event.
-      try {
-        if (connected && !sessionStorage.getItem("evrion_session_flag")) {
-          const { isNew } = getOrCreateVisitorId();
-          trackEvent("session_started", { isNew });
-          sessionStorage.setItem("evrion_session_flag", "1");
-        }
-      } catch (e) {
-        /* ignore */
-      }
+      // No manual session_started firing here anymore — trackEvent() itself
+      // detects a new session (via the 30-minute inactivity rule) the moment
+      // the first real event fires (the page_view effect below), and writes
+      // exactly one session_started row automatically. This means session
+      // detection can never be "missed" on some code path that forgets to
+      // check for it.
 
       setLoading(false);
     })();

@@ -216,12 +216,28 @@ export async function deleteFeedback(id) {
 /*  Analytics — a small, honest event-tracking foundation.              */
 /*  Fire-and-forget: a tracking failure must never break the app, and   */
 /*  it never blocks the UI waiting on a network round-trip.             */
+/*                                                                      */
+/*  Four distinct concepts, deliberately never conflated:               */
+/*   - VISITOR: one persistent anonymous id per browser, forever.       */
+/*   - SESSION: a period of continuous activity, ends after 30 minutes  */
+/*     of inactivity — not tied to navigation, and not tied to closing  */
+/*     the tab (closing and reopening within the timeout is still the   */
+/*     same session; leaving one tab idle past the timeout starts a     */
+/*     new one even without closing anything).                         */
+/*   - PAGE VIEW: fired only on real top-level screen navigation (see   */
+/*     the single call site in App's view-change effect) — never on     */
+/*     re-renders, answer taps, or question changes within a quiz.      */
+/*   - EVENT: a specific product interaction (quiz_started, etc.) that   */
+/*     can happen many times in one session without implying a new      */
+/*     visitor or session.                                             */
 /* ------------------------------------------------------------------ */
 
 const VISITOR_ID_KEY = "evrion_visitor_id";
 const SESSION_ID_KEY = "evrion_session_id";
+const SESSION_LAST_ACTIVE_KEY = "evrion_session_last_active";
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes, per spec
 
-/** A long-lived, anonymous, per-browser id. Returns whether it was just created (first-ever visit). */
+/** A long-lived, anonymous, per-browser id — the ONE thing that defines "a visitor". Never regenerated once set. */
 export function getOrCreateVisitorId() {
   try {
     let id = localStorage.getItem(VISITOR_ID_KEY);
@@ -233,36 +249,121 @@ export function getOrCreateVisitorId() {
     }
     return { id, isNew };
   } catch (e) {
-    return { id: `vis_${Date.now().toString(36)}`, isNew: true };
+    // Storage unavailable (e.g. some private-browsing modes) — fall back to a
+    // one-off id rather than crashing. This visitor won't persist, which is
+    // an honest reflection of the environment, not a fabricated number.
+    return { id: `vis_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`, isNew: true };
   }
 }
 
-/** A per-tab-session id — persists across reloads within the same tab, cleared when the tab closes. */
+/**
+ * The current session id, using a real inactivity timeout — not tab
+ * lifetime. Every call both resolves the id AND refreshes "last active",
+ * so continued use naturally extends the same session. Only starts a new
+ * session if more than SESSION_TIMEOUT_MS has passed since the last call.
+ */
 export function getOrCreateSessionId() {
   try {
-    let id = sessionStorage.getItem(SESSION_ID_KEY);
-    if (!id) {
-      id = `sess_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-      sessionStorage.setItem(SESSION_ID_KEY, id);
+    const now = Date.now();
+    const lastActive = Number(localStorage.getItem(SESSION_LAST_ACTIVE_KEY) || 0);
+    let id = localStorage.getItem(SESSION_ID_KEY);
+    let isNewSession = false;
+    if (!id || now - lastActive > SESSION_TIMEOUT_MS) {
+      id = `sess_${now.toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem(SESSION_ID_KEY, id);
+      isNewSession = true;
     }
-    return id;
+    localStorage.setItem(SESSION_LAST_ACTIVE_KEY, String(now));
+    return { id, isNewSession };
   } catch (e) {
-    return `sess_${Date.now().toString(36)}`;
+    return { id: `sess_${Date.now().toString(36)}`, isNewSession: true };
   }
 }
 
-/** Records one analytics event. Never throws — a tracking hiccup should never break the app. */
+/** A tiny, non-cryptographic hash — just enough to tell "same text" from "different text" for dedup purposes. */
+function simpleHash(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (h * 31 + str.charCodeAt(i)) | 0;
+  }
+  return h.toString(36);
+}
+
+/**
+ * Builds a deterministic dedup key for one event. Two calls with the SAME
+ * key within the same short time bucket collapse into one database row —
+ * that's what catches an accidental double-fire (a re-render quirk, a
+ * double-tap, a retried network call). Two calls for a genuinely different
+ * occurrence (a different question, a different day, different content, or
+ * just later in time) get different keys and are correctly counted as
+ * separate events.
+ *
+ * The bucket is deliberately short (2 seconds) — long enough to absorb a
+ * real accidental duplicate, far shorter than the realistic pace of actual
+ * distinct user actions, so legitimate repeats are never merged.
+ */
+function buildDedupKey(eventType, sessionId, metadata) {
+  const bucket = Math.floor(Date.now() / 2000);
+  let discriminator = "";
+  if (eventType === "page_view") discriminator = metadata.page || "";
+  else if (eventType === "quiz_started" || eventType === "quiz_completed") discriminator = metadata.categoryId || "";
+  else if (eventType === "situation_played") discriminator = metadata.questionId || "";
+  else if (eventType === "today_page_viewed") discriminator = metadata.date || "";
+  else if (eventType === "community_submission") discriminator = metadata.title ? simpleHash(metadata.title) : "";
+  else if (eventType === "feedback_submitted") discriminator = metadata.message ? simpleHash(metadata.message) : metadata.type || "";
+  return `${sessionId}_${eventType}_${discriminator}_${bucket}`;
+}
+
+/**
+ * Records one analytics event. Never throws — a tracking hiccup must never
+ * break the app.
+ *
+ * Session detection lives HERE, not scattered across call sites: every
+ * single tracked action (whatever it is) checks whether a new session has
+ * started and, if so, writes exactly one session_started row first. This
+ * means session_started can never be "forgotten" on some code path — it's
+ * a property of the tracking function itself, not something each caller
+ * has to remember to check.
+ *
+ * Deduplication: every row gets a deterministic client_event_id (see
+ * buildDedupKey above), enforced unique at the database level (see
+ * supabase-analytics-v2.sql). Using upsert with ignoreDuplicates means an
+ * accidental double-call that produces the same key can never create a
+ * second row — the database itself refuses it, which is a stronger
+ * guarantee than any client-side-only heuristic.
+ */
 export async function trackEvent(eventType, metadata = {}) {
   if (!supabase) return;
   try {
-    const { id: visitorId } = getOrCreateVisitorId();
-    const sessionId = getOrCreateSessionId();
-    await supabase.from("analytics_events").insert({
-      event_type: eventType,
-      visitor_id: visitorId,
-      session_id: sessionId,
-      metadata,
-    });
+    const { id: visitorId, isNew: isNewVisitor } = getOrCreateVisitorId();
+    const { id: sessionId, isNewSession } = getOrCreateSessionId();
+
+    if (isNewSession) {
+      await supabase.from("analytics_events").upsert(
+        {
+          event_type: "session_started",
+          visitor_id: visitorId,
+          session_id: sessionId,
+          metadata: { isNewVisitor },
+          client_event_id: `${sessionId}_session_started`,
+        },
+        { onConflict: "client_event_id", ignoreDuplicates: true }
+      );
+    }
+
+    if (eventType === "session_started") return; // already handled above, never fired twice
+
+    const clientEventId = buildDedupKey(eventType, sessionId, metadata);
+    await supabase.from("analytics_events").upsert(
+      {
+        event_type: eventType,
+        visitor_id: visitorId,
+        session_id: sessionId,
+        metadata,
+        client_event_id: clientEventId,
+      },
+      { onConflict: "client_event_id", ignoreDuplicates: true }
+    );
   } catch (e) {
     /* analytics is never allowed to break the app */
   }
