@@ -112,3 +112,60 @@ export async function uploadMedia(file) {
   const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
   return data.publicUrl;
 }
+
+const COMMUNITY_MEDIA_BUCKET = "community-media";
+
+/** Uploads an optional image attached to a public (not-logged-in) situation submission. */
+export async function uploadCommunityMedia(file) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const path = `${Date.now()}-${safeName}`;
+  const { error } = await supabase.storage.from(COMMUNITY_MEDIA_BUCKET).upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+  });
+  if (error) throw error;
+  const { data } = supabase.storage.from(COMMUNITY_MEDIA_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+/** Submits a community situation. Always lands as "pending" — never auto-published. */
+export async function submitSituation({ title, prompt, options, imageUrl }) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const { error } = await supabase.from("community_submissions").insert({
+    title,
+    prompt,
+    options,
+    image_url: imageUrl || null,
+    status: "pending",
+  });
+  if (error) throw error;
+}
+
+/** Admin-only: every submission, regardless of status. */
+export async function fetchSubmissions() {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("community_submissions")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return data;
+}
+
+/** Admin-only: updates exactly one submission (status, edited content, or both). */
+export async function updateSubmission(id, patch) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const { error } = await supabase
+    .from("community_submissions")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/** Admin-only: deletes exactly one submission. */
+export async function deleteSubmission(id) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const { error } = await supabase.from("community_submissions").delete().eq("id", id);
+  if (error) throw error;
+}

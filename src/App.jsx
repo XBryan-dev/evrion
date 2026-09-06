@@ -16,7 +16,23 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
-import { loadContent, saveContent, signIn, signOut, getSession, castOrChangeVote, removeVote, fetchVoteCounts, getVoterId, uploadMedia } from "./storage";
+import {
+  loadContent,
+  saveContent,
+  signIn,
+  signOut,
+  getSession,
+  castOrChangeVote,
+  removeVote,
+  fetchVoteCounts,
+  getVoterId,
+  uploadMedia,
+  uploadCommunityMedia,
+  submitSituation,
+  fetchSubmissions,
+  updateSubmission,
+  deleteSubmission,
+} from "./storage";
 
 /* ------------------------------------------------------------------ */
 /*  EVRION — "What type of Cameroonian are you?"                      */
@@ -923,7 +939,7 @@ function ChatScene({ question }) {
 /*  Public views                                                       */
 /* ------------------------------------------------------------------ */
 
-function HomeView({ onStart, onAdmin, onToday }) {
+function HomeView({ onStart, onAdmin, onToday, onSubmit }) {
   return (
     <div className="evrion-scroll" style={{ display: "flex", flexDirection: "column", justifyContent: "center", minHeight: "100%" }}>
       <div style={{ textAlign: "center", marginBottom: 8 }}>
@@ -951,6 +967,13 @@ function HomeView({ onStart, onAdmin, onToday }) {
         onClick={onToday}
       >
         🗓 Today's Page
+      </button>
+
+      <button
+        onClick={onSubmit}
+        style={{ background: "none", border: "none", color: "rgba(246,239,221,0.5)", fontSize: 12.5, marginTop: 16, cursor: "pointer", fontWeight: 700 }}
+      >
+        ✍️ Submit a situation
       </button>
 
       <button
@@ -1412,6 +1435,145 @@ function TodayPageView({ content, onBack, onGoCategories }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Submit a Situation — community contributions (foundation only)     */
+/*  Every submission lands as an independent, pending record in its    */
+/*  own Supabase table. Nothing here ever becomes public automatically —*/
+/*  an admin has to review, edit if needed, and approve it first.      */
+/* ------------------------------------------------------------------ */
+
+function SubmitSituationView({ onBack }) {
+  const blank = { title: "", prompt: "", options: ["", ""], imageFile: null, imagePreview: "" };
+  const [form, setForm] = useState(blank);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+
+  const set = (patch) => setForm({ ...form, ...patch });
+  const setOption = (idx, text) => set({ options: form.options.map((o, i) => (i === idx ? text : o)) });
+  const addOption = () => form.options.length < 6 && set({ options: [...form.options, ""] });
+  const removeOption = (idx) => set({ options: form.options.filter((_, i) => i !== idx) });
+
+  const onPickImage = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    set({ imageFile: file, imagePreview: URL.createObjectURL(file) });
+  };
+
+  const validOptions = form.options.map((o) => o.trim()).filter(Boolean);
+  const isValid = form.title.trim().length > 0 && form.prompt.trim().length > 0 && validOptions.length >= 2;
+
+  const submit = async () => {
+    if (!isValid || submitting) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      let imageUrl = "";
+      if (form.imageFile) {
+        imageUrl = await uploadCommunityMedia(form.imageFile);
+      }
+      await submitSituation({
+        title: form.title.trim(),
+        prompt: form.prompt.trim(),
+        options: validOptions.map((text) => ({ id: uid("opt"), text })),
+        imageUrl,
+      });
+      setDone(true);
+    } catch (e) {
+      setError(e.message || "Couldn't submit that just now — try again in a moment.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (done) {
+    return (
+      <div className="evrion-scroll" style={{ display: "flex", flexDirection: "column", justifyContent: "center", minHeight: "100%", textAlign: "center" }}>
+        <div style={{ fontSize: 48, marginBottom: 10 }}>🙌</div>
+        <div className="evrion-wordmark" style={{ fontSize: 22, color: "#E7B10A", marginBottom: 8 }}>Situation submitted!</div>
+        <p style={{ fontSize: 14.5, opacity: 0.75, lineHeight: 1.6, marginBottom: 28 }}>
+          Thanks for helping build EVRION. Our team reviews every submission before anything goes live, so keep an eye out.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={() => { setForm(blank); setDone(false); }}>
+            Submit another
+          </button>
+          <button className="evrion-btn evrion-btn-secondary evrion-btn-block" onClick={onBack}>
+            Back home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <TopBar onBack={onBack} title="Submit a situation" />
+      <div className="evrion-scroll">
+        <p style={{ fontSize: 14, opacity: 0.75, lineHeight: 1.5, marginBottom: 4 }}>
+          Got a moment every Cameroonian would recognize? Tell us about it.
+        </p>
+        <div className="evrion-banner" style={{ background: "rgba(231,177,10,0.1)", borderColor: "rgba(231,177,10,0.35)", color: "#E7B10A" }}>
+          Submissions are reviewed by the EVRION team before they ever appear publicly — this isn't an instant post.
+        </div>
+
+        <div className="evrion-field">
+          <label className="evrion-label">Give it a short title</label>
+          <input className="evrion-input" value={form.title} onChange={(e) => set({ title: e.target.value })} placeholder="e.g. The Data Bundle" maxLength={60} />
+        </div>
+
+        <div className="evrion-field">
+          <label className="evrion-label">Set the scene — what happens?</label>
+          <textarea
+            className="evrion-textarea"
+            style={{ minHeight: 100 }}
+            value={form.prompt}
+            onChange={(e) => set({ prompt: e.target.value })}
+            placeholder="Describe the situation the way you'd tell a friend..."
+            maxLength={500}
+          />
+        </div>
+
+        <div className="evrion-field">
+          <label className="evrion-label">How could someone react? (at least 2)</label>
+          {form.options.map((o, idx) => (
+            <div key={idx} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+              <input className="evrion-input" value={o} onChange={(e) => setOption(idx, e.target.value)} placeholder={`Option ${idx + 1}`} maxLength={120} />
+              {form.options.length > 2 && (
+                <button className="evrion-icon-btn danger" onClick={() => removeOption(idx)}><Trash2 size={13} /></button>
+              )}
+            </div>
+          ))}
+          {form.options.length < 6 && (
+            <button className="evrion-btn evrion-btn-secondary" style={{ fontSize: 12.5, padding: "8px 12px" }} onClick={addOption}>
+              <Plus size={13} /> Add another option
+            </button>
+          )}
+        </div>
+
+        <div className="evrion-field">
+          <label className="evrion-label">Add a photo (optional)</label>
+          <input type="file" accept="image/*" className="evrion-input" onChange={onPickImage} />
+          {form.imagePreview && (
+            <img src={form.imagePreview} alt="" style={{ width: "100%", borderRadius: 12, marginTop: 8 }} />
+          )}
+        </div>
+
+        {error && <div style={{ color: "#E9967A", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+
+        <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={submit} disabled={!isValid || submitting}>
+          {submitting ? "Submitting…" : "Submit situation"}
+        </button>
+        {!isValid && (
+          <div style={{ fontSize: 11.5, opacity: 0.45, textAlign: "center", marginTop: 8 }}>
+            Fill in a title, the scene, and at least 2 options to submit.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Admin                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -1474,7 +1636,7 @@ function AdminLogin({ onBack, onSuccess }) {
   );
 }
 
-const ADMIN_TABS = ["Today's Page", "Categories", "Questions", "Traits", "Personalities"];
+const ADMIN_TABS = ["Today's Page", "Community", "Categories", "Questions", "Traits", "Personalities"];
 
 function AdminDashboard({ content, setContent, connected, synced, onInitialize, onBack, onLogout }) {
   const [tab, setTab] = useState("Today's Page");
@@ -1541,6 +1703,7 @@ function AdminDashboard({ content, setContent, connected, synced, onInitialize, 
         </div>
 
         {tab === "Today's Page" && <TodayPageTab content={content} save={save} />}
+        {tab === "Community" && <CommunityTab />}
         {tab === "Categories" && <CategoriesTab content={content} save={save} setModal={setModal} />}
         {tab === "Questions" && <QuestionsTab content={content} save={save} setModal={setModal} />}
         {tab === "Traits" && <TraitsTab content={content} save={save} setModal={setModal} />}
@@ -1567,6 +1730,8 @@ function TodayPageTab({ content, save }) {
   const [postModal, setPostModal] = useState(null); // { post, mode: 'new' | 'edit' }
   const [previewPost, setPreviewPost] = useState(null);
   const [addPicker, setAddPicker] = useState(false);
+  const [importPicker, setImportPicker] = useState(false);
+  const [approvedSubs, setApprovedSubs] = useState(null);
   const [flash, setFlash] = useState("");
 
   const postsForDate = posts.filter((p) => p.date === date).sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -1609,6 +1774,33 @@ function TodayPageTab({ content, save }) {
   };
 
   const openNewPostPicker = () => setAddPicker(true);
+
+  const openImportPicker = async () => {
+    setAddPicker(false);
+    setImportPicker(true);
+    if (!approvedSubs) {
+      const all = await fetchSubmissions();
+      setApprovedSubs(all.filter((s) => s.status === "approved"));
+    }
+  };
+
+  const importSubmission = (sub) => {
+    setImportPicker(false);
+    const maxOrder = postsForDate.reduce((m, p) => Math.max(m, p.order || 0), 0);
+    const nowIso = new Date().toISOString();
+    const fresh = {
+      ...defaultBlockData("situation"),
+      title: sub.title || "",
+      prompt: sub.prompt || "",
+      format: "quick",
+      date,
+      status: "draft",
+      order: maxOrder + 1,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    setPostModal({ post: fresh, mode: "new" });
+  };
 
   const startNewPost = (type) => {
     setAddPicker(false);
@@ -1715,7 +1907,31 @@ function TodayPageTab({ content, save }) {
                 {t.label}
               </button>
             ))}
+            <button className="evrion-answer" style={{ borderStyle: "dashed", borderColor: "#C4AEFF", color: "#C4AEFF" }} onClick={openImportPicker}>
+              ✨ Import from an approved community submission
+            </button>
           </div>
+        </ModalShell>
+      )}
+
+      {importPicker && (
+        <ModalShell title="Import from community" close={() => setImportPicker(false)}>
+          {approvedSubs === null && <div className="evrion-empty">Loading approved submissions…</div>}
+          {approvedSubs !== null && approvedSubs.length === 0 && (
+            <div className="evrion-empty">No approved submissions yet — approve some in the Community tab first.</div>
+          )}
+          {approvedSubs !== null && approvedSubs.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {approvedSubs.map((sub) => (
+                <button key={sub.id} className="evrion-answer" onClick={() => importSubmission(sub)}>
+                  <div style={{ fontWeight: 800 }}>{sub.title || "(untitled)"}</div>
+                  <div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>
+                    {(sub.prompt || "").slice(0, 70)}{(sub.prompt || "").length > 70 ? "…" : ""}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </ModalShell>
       )}
 
@@ -1999,6 +2215,203 @@ function TodayBlockEditModal({ post, mode, close, onSaveDraft, onPublish, onSave
             Save changes {draft.status === "live" ? "(stays live)" : "(stays draft)"}
           </button>
         )}
+      </div>
+    </ModalShell>
+  );
+}
+
+function CommunityTab() {
+  const [subs, setSubs] = useState(null); // null = loading
+  const [filter, setFilter] = useState("pending");
+  const [editSub, setEditSub] = useState(null);
+  const [previewSub, setPreviewSub] = useState(null);
+  const [flash, setFlash] = useState("");
+
+  const load = useCallback(async () => {
+    const data = await fetchSubmissions();
+    setSubs(data);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const flashMsg = (msg) => {
+    setFlash(msg);
+    setTimeout(() => setFlash(""), 1600);
+  };
+
+  // Every action below touches exactly one submission by id — the rest of
+  // the list is always passed through untouched, mirroring Today's Page.
+  const setStatus = async (sub, status) => {
+    try {
+      await updateSubmission(sub.id, { status });
+      setSubs(subs.map((s) => (s.id === sub.id ? { ...s, status } : s)));
+      flashMsg(status === "approved" ? "Approved" : status === "rejected" ? "Rejected" : "Moved to pending");
+    } catch (e) {
+      flashMsg(`Failed: ${e.message}`);
+    }
+  };
+
+  const remove = async (sub) => {
+    if (!confirm("Delete this submission? This only removes this one.")) return;
+    try {
+      await deleteSubmission(sub.id);
+      setSubs(subs.filter((s) => s.id !== sub.id));
+      flashMsg("Deleted");
+    } catch (e) {
+      flashMsg(`Failed: ${e.message}`);
+    }
+  };
+
+  const saveEdit = async (updated) => {
+    try {
+      await updateSubmission(updated.id, {
+        title: updated.title,
+        prompt: updated.prompt,
+        options: updated.options,
+        image_url: updated.image_url,
+      });
+      setSubs(subs.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)));
+      setEditSub(null);
+      flashMsg("Saved — this edited version is what gets approved");
+    } catch (e) {
+      flashMsg(`Failed: ${e.message}`);
+    }
+  };
+
+  if (subs === null) return <div className="evrion-empty">Loading submissions…</div>;
+
+  const filtered = subs.filter((s) => s.status === filter);
+  const counts = { pending: 0, approved: 0, rejected: 0 };
+  subs.forEach((s) => { counts[s.status] = (counts[s.status] || 0) + 1; });
+
+  return (
+    <div>
+      <div className="evrion-tabs">
+        {["pending", "approved", "rejected"].map((f) => (
+          <button key={f} className={`evrion-tab ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
+            {f[0].toUpperCase() + f.slice(1)} ({counts[f] || 0})
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 && <div className="evrion-empty">No {filter} submissions.</div>}
+
+      {filtered.map((sub) => (
+        <div className="evrion-today-admin-block" key={sub.id}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
+            <span className={`evrion-status-pill ${sub.status === "approved" ? "published" : "draft"}`}>
+              {sub.status}
+            </span>
+          </div>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>{sub.title || "(untitled)"}</div>
+          <div style={{ fontSize: 12.5, opacity: 0.6, margin: "4px 0", lineHeight: 1.4 }}>
+            {(sub.prompt || "").slice(0, 100)}{(sub.prompt || "").length > 100 ? "…" : ""}
+          </div>
+          <div style={{ fontSize: 11, opacity: 0.4 }}>
+            Submitted {sub.created_at ? new Date(sub.created_at).toLocaleString() : "—"}
+          </div>
+          <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+            <button className="evrion-btn evrion-btn-secondary" style={{ fontSize: 12, padding: "7px 11px" }} onClick={() => setPreviewSub(sub)}>
+              Preview
+            </button>
+            <button className="evrion-btn evrion-btn-secondary" style={{ fontSize: 12, padding: "7px 11px" }} onClick={() => setEditSub(sub)}>
+              Edit
+            </button>
+            {sub.status !== "approved" && (
+              <button className="evrion-btn evrion-btn-primary" style={{ fontSize: 12, padding: "7px 11px" }} onClick={() => setStatus(sub, "approved")}>
+                Approve
+              </button>
+            )}
+            {sub.status !== "rejected" && (
+              <button className="evrion-btn evrion-btn-danger" style={{ fontSize: 12, padding: "7px 11px" }} onClick={() => setStatus(sub, "rejected")}>
+                Reject
+              </button>
+            )}
+            {sub.status !== "pending" && (
+              <button className="evrion-btn evrion-btn-secondary" style={{ fontSize: 12, padding: "7px 11px" }} onClick={() => setStatus(sub, "pending")}>
+                Back to pending
+              </button>
+            )}
+            <button className="evrion-icon-btn danger" onClick={() => remove(sub)} title="Delete"><Trash2 size={14} /></button>
+          </div>
+        </div>
+      ))}
+
+      {flash && <div style={{ textAlign: "center", fontSize: 12.5, color: "#E7B10A", marginTop: 10, fontWeight: 700 }}>{flash}</div>}
+
+      {editSub && <CommunityEditModal sub={editSub} close={() => setEditSub(null)} onSave={saveEdit} />}
+      {previewSub && <CommunityPreviewModal sub={previewSub} close={() => setPreviewSub(null)} />}
+    </div>
+  );
+}
+
+function CommunityEditModal({ sub, close, onSave }) {
+  const [draft, setDraft] = useState({
+    ...sub,
+    options: (sub.options || []).map((o) => (typeof o === "string" ? { id: uid("opt"), text: o } : o)),
+  });
+  const set = (patch) => setDraft({ ...draft, ...patch });
+
+  const updateOption = (idx, text) => set({ options: draft.options.map((o, i) => (i === idx ? { ...o, text } : o)) });
+  const addOption = () => set({ options: [...draft.options, { id: uid("opt"), text: "" }] });
+  const removeOption = (idx) => set({ options: draft.options.filter((_, i) => i !== idx) });
+
+  const submit = () => onSave(draft);
+
+  return (
+    <ModalShell title="Edit submission" close={close}>
+      <div className="evrion-field">
+        <label className="evrion-label">Title</label>
+        <input className="evrion-input" value={draft.title || ""} onChange={(e) => set({ title: e.target.value })} />
+      </div>
+      <div className="evrion-field">
+        <label className="evrion-label">Scenario</label>
+        <textarea className="evrion-textarea" value={draft.prompt || ""} onChange={(e) => set({ prompt: e.target.value })} />
+      </div>
+      <div className="evrion-field">
+        <label className="evrion-label">Answer options</label>
+        {draft.options.map((o, idx) => (
+          <div key={o.id || idx} style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+            <input className="evrion-input" value={o.text} onChange={(e) => updateOption(idx, e.target.value)} />
+            <button className="evrion-icon-btn danger" onClick={() => removeOption(idx)} disabled={draft.options.length <= 2}>
+              <Trash2 size={13} />
+            </button>
+          </div>
+        ))}
+        <button className="evrion-btn evrion-btn-secondary" style={{ fontSize: 12.5, padding: "8px 12px" }} onClick={addOption}>
+          <Plus size={13} /> Add option
+        </button>
+      </div>
+      {draft.image_url && (
+        <div className="evrion-field">
+          <label className="evrion-label">Submitted image</label>
+          <img src={draft.image_url} alt="" style={{ width: "100%", borderRadius: 12 }} />
+        </div>
+      )}
+      <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={submit}>
+        Save edits {draft.status === "pending" ? "(this is what will be approved)" : ""}
+      </button>
+    </ModalShell>
+  );
+}
+
+function CommunityPreviewModal({ sub, close }) {
+  return (
+    <ModalShell title="Preview submission" close={close}>
+      <div className="evrion-card">
+        <div style={{ fontFamily: "'Archivo Black', sans-serif", fontSize: 18, marginBottom: 10 }}>{sub.title || "(untitled)"}</div>
+        {sub.image_url && <img src={sub.image_url} alt="" style={{ width: "100%", borderRadius: 12, marginBottom: 12 }} />}
+        <p style={{ fontSize: 14.5, lineHeight: 1.6, opacity: 0.9, marginBottom: 14 }}>{sub.prompt}</p>
+        <div style={{ fontSize: 11.5, opacity: 0.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 8 }}>
+          Submitted options
+        </div>
+        {(sub.options || []).map((o, idx) => (
+          <div key={o.id || idx} className="evrion-answer" style={{ marginBottom: 8, cursor: "default" }}>
+            {typeof o === "string" ? o : o.text}
+          </div>
+        ))}
       </div>
     </ModalShell>
   );
@@ -2571,8 +2984,11 @@ export default function App() {
             onStart={() => setView("categories")}
             onAdmin={() => setView(adminLoggedIn ? "adminHome" : "adminLogin")}
             onToday={() => setView("today")}
+            onSubmit={() => setView("submit")}
           />
         )}
+
+        {view === "submit" && <SubmitSituationView onBack={goHome} />}
 
         {view === "today" && (
           <TodayPageView content={content} onBack={goHome} onGoCategories={() => setView("categories")} />
