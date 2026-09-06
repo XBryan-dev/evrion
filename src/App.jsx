@@ -38,6 +38,9 @@ import {
   fetchFeedback,
   updateFeedback,
   deleteFeedback,
+  trackEvent,
+  fetchAnalyticsEvents,
+  getOrCreateVisitorId,
 } from "./storage";
 
 /* ------------------------------------------------------------------ */
@@ -771,6 +774,52 @@ const GlobalStyle = () => (
     }
     .evrion-type-pill.selected { background: #2E6F4E; border-color: #2E6F4E; color: #FFFFFF; }
 
+    /* Analytics — plain EVRION typography, no icon-per-metric decoration */
+    .evrion-stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .evrion-stat-card {
+      background: #1B2715;
+      border: 1px solid rgba(246,239,221,0.1);
+      border-radius: 14px;
+      padding: 14px;
+    }
+    .evrion-stat-value {
+      font-family: 'Archivo Black', sans-serif;
+      font-size: 24px;
+      color: #E7B10A;
+      line-height: 1.1;
+    }
+    .evrion-stat-label {
+      font-size: 11.5px;
+      opacity: 0.6;
+      margin-top: 4px;
+      font-weight: 700;
+    }
+    .evrion-analytics-section {
+      margin-bottom: 22px;
+    }
+    .evrion-analytics-heading {
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      opacity: 0.6;
+      margin-bottom: 10px;
+    }
+    .evrion-rank-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 9px 0;
+      border-bottom: 1px solid rgba(246,239,221,0.06);
+      font-size: 13.5px;
+    }
+    .evrion-rank-row:last-child { border-bottom: none; }
+
     /* ---------------------------------------------------------------- */
     /*  Today's Page — EVRION's new visual direction: midnight + violet  */
     /*  + controlled warm orange. Scoped to .evtoday- so the rest of the */
@@ -1070,6 +1119,11 @@ function QuizView({ category, questions, answersByQuestion, onFinish, onBack }) 
 
   useEffect(() => {
     setSelectedId(null);
+  }, [question?.id]);
+
+  useEffect(() => {
+    if (question) trackEvent("situation_played", { questionId: question.id, questionTitle: question.title });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question?.id]);
 
   if (active.length === 0) {
@@ -1452,6 +1506,14 @@ function TodayPageView({ content, onBack, onGoCategories }) {
     }
   }
 
+  const shownPostIds = shownPosts.map((p) => p.id).join(",");
+  useEffect(() => {
+    if (shownPosts.length > 0) {
+      trackEvent("today_page_viewed", { date: shownDate, postIds: shownPosts.map((p) => p.id) });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shownDate, shownPostIds]);
+
   return (
     <div className="evtoday-root" style={{ minHeight: "100%", display: "flex", flexDirection: "column" }}>
       <TopBar onBack={onBack} title="" />
@@ -1522,6 +1584,7 @@ function SubmitSituationView({ onBack }) {
         options: validOptions.map((text) => ({ id: uid("opt"), text })),
         imageUrl,
       });
+      trackEvent("community_submission", {});
       setDone(true);
     } catch (e) {
       setError(e.message || "Couldn't submit that just now — try again in a moment.");
@@ -1673,6 +1736,7 @@ function FeedbackModal({ pageContext, close }) {
         pageContext,
         deviceInfo: typeof navigator !== "undefined" ? navigator.userAgent : "",
       });
+      trackEvent("feedback_submitted", { type, rating });
       setDone(true);
     } catch (e) {
       setError(e.message || "Couldn't send that just now — try again in a moment.");
@@ -1818,10 +1882,10 @@ function AdminLogin({ onBack, onSuccess }) {
   );
 }
 
-const ADMIN_TABS = ["Today's Page", "Community", "Feedback", "Categories", "Questions", "Traits", "Personalities"];
+const ADMIN_TABS = ["Analytics", "Today's Page", "Community", "Feedback", "Categories", "Questions", "Traits", "Personalities"];
 
 function AdminDashboard({ content, setContent, connected, synced, onInitialize, onBack, onLogout }) {
-  const [tab, setTab] = useState("Today's Page");
+  const [tab, setTab] = useState("Analytics");
   const [modal, setModal] = useState(null);
   const [saveError, setSaveError] = useState("");
 
@@ -1886,6 +1950,7 @@ function AdminDashboard({ content, setContent, connected, synced, onInitialize, 
 
         {tab === "Today's Page" && <TodayPageTab content={content} save={save} />}
         {tab === "Community" && <CommunityTab />}
+        {tab === "Analytics" && <AnalyticsTab content={content} />}
         {tab === "Feedback" && <FeedbackTab />}
         {tab === "Categories" && <CategoriesTab content={content} save={save} setModal={setModal} />}
         {tab === "Questions" && <QuestionsTab content={content} save={save} setModal={setModal} />}
@@ -2600,6 +2665,170 @@ function CommunityPreviewModal({ sub, close }) {
   );
 }
 
+function rangeToSinceIso(range) {
+  const now = new Date();
+  if (range === "today") {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    return start.toISOString();
+  }
+  if (range === "7d") return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  if (range === "30d") return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  return null; // all time
+}
+
+function AnalyticsTab({ content }) {
+  const [range, setRange] = useState("7d");
+  const [events, setEvents] = useState(null);
+  const [subs, setSubs] = useState(null);
+
+  const load = useCallback(async () => {
+    const since = rangeToSinceIso(range);
+    const [ev, submissions] = await Promise.all([fetchAnalyticsEvents(since), fetchSubmissions()]);
+    setEvents(ev);
+    setSubs(submissions);
+  }, [range]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (events === null) return <div className="evrion-empty">Loading analytics…</div>;
+
+  const count = (type) => events.filter((e) => e.event_type === type).length;
+
+  const pageViews = count("page_view");
+  const uniqueVisitors = new Set(events.map((e) => e.visitor_id).filter(Boolean)).size;
+  const sessionEvents = events.filter((e) => e.event_type === "session_started");
+  const sessions = sessionEvents.length;
+  const newSessions = sessionEvents.filter((e) => e.metadata?.isNew).length;
+  const returningSessions = sessions - newSessions;
+
+  const quizStarts = count("quiz_started");
+  const quizCompletions = count("quiz_completed");
+  const completionRate = quizStarts > 0 ? Math.round((quizCompletions / quizStarts) * 100) : 0;
+
+  const todayPageViews = count("today_page_viewed");
+  const communitySubmissionEvents = count("community_submission");
+
+  const feedbackEvents = events.filter((e) => e.event_type === "feedback_submitted");
+  const feedbackByType = {};
+  feedbackEvents.forEach((e) => {
+    const t = e.metadata?.type || "general";
+    feedbackByType[t] = (feedbackByType[t] || 0) + 1;
+  });
+  const ratedFeedback = feedbackEvents.filter((e) => e.metadata?.rating != null);
+  const avgRating = ratedFeedback.length > 0
+    ? (ratedFeedback.reduce((s, e) => s + Number(e.metadata.rating), 0) / ratedFeedback.length)
+    : null;
+
+  const situationCounts = {};
+  events.filter((e) => e.event_type === "situation_played").forEach((e) => {
+    const id = e.metadata?.questionId;
+    if (!id) return;
+    if (!situationCounts[id]) situationCounts[id] = { title: e.metadata?.questionTitle || id, count: 0 };
+    situationCounts[id].count += 1;
+  });
+  const mostPlayed = Object.values(situationCounts).sort((a, b) => b.count - a.count).slice(0, 5);
+
+  const postViewCounts = {};
+  events.filter((e) => e.event_type === "today_page_viewed").forEach((e) => {
+    (e.metadata?.postIds || []).forEach((pid) => {
+      postViewCounts[pid] = (postViewCounts[pid] || 0) + 1;
+    });
+  });
+  const postTitle = (pid) => {
+    const p = (content.todayPosts || []).find((x) => x.id === pid);
+    if (!p) return "(deleted post)";
+    return p.title || p.heading || p.question || p.label || p.caption || "(untitled post)";
+  };
+  const topPosts = Object.entries(postViewCounts)
+    .map(([pid, c]) => ({ id: pid, title: postTitle(pid), count: c }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+
+  const communityCurrent = { pending: 0, approved: 0, rejected: 0 };
+  (subs || []).forEach((s) => { communityCurrent[s.status] = (communityCurrent[s.status] || 0) + 1; });
+
+  return (
+    <div>
+      <div className="evrion-tabs">
+        {[
+          { id: "today", label: "Today" },
+          { id: "7d", label: "Last 7 days" },
+          { id: "30d", label: "Last 30 days" },
+          { id: "all", label: "All time" },
+        ].map((r) => (
+          <button key={r.id} className={`evrion-tab ${range === r.id ? "active" : ""}`} onClick={() => setRange(r.id)}>
+            {r.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="evrion-stat-grid">
+        <div className="evrion-stat-card"><div className="evrion-stat-value">{pageViews}</div><div className="evrion-stat-label">Total page views</div></div>
+        <div className="evrion-stat-card"><div className="evrion-stat-value">{uniqueVisitors}</div><div className="evrion-stat-label">Unique visitors</div></div>
+        <div className="evrion-stat-card"><div className="evrion-stat-value">{sessions}</div><div className="evrion-stat-label">Sessions</div></div>
+        <div className="evrion-stat-card"><div className="evrion-stat-value">{quizStarts}</div><div className="evrion-stat-label">Quiz starts</div></div>
+        <div className="evrion-stat-card"><div className="evrion-stat-value">{quizCompletions}</div><div className="evrion-stat-label">Quiz completions</div></div>
+        <div className="evrion-stat-card"><div className="evrion-stat-value">{completionRate}%</div><div className="evrion-stat-label">Completion rate</div></div>
+        <div className="evrion-stat-card"><div className="evrion-stat-value">{todayPageViews}</div><div className="evrion-stat-label">Today's Page views</div></div>
+        <div className="evrion-stat-card"><div className="evrion-stat-value">{communitySubmissionEvents}</div><div className="evrion-stat-label">Community submissions</div></div>
+      </div>
+
+      {sessions > 0 && (
+        <div className="evrion-analytics-section">
+          <div className="evrion-analytics-heading">Visitors</div>
+          <div className="evrion-rank-row"><span>New</span><span>{newSessions}</span></div>
+          <div className="evrion-rank-row"><span>Returning</span><span>{returningSessions}</span></div>
+        </div>
+      )}
+
+      <div className="evrion-analytics-section">
+        <div className="evrion-analytics-heading">Most played situations</div>
+        {mostPlayed.length === 0 && <div className="evrion-empty">No plays recorded in this period.</div>}
+        {mostPlayed.map((s, i) => (
+          <div className="evrion-rank-row" key={i}>
+            <span>{i + 1}. {s.title}</span>
+            <span>{s.count} play{s.count !== 1 ? "s" : ""}</span>
+          </div>
+        ))}
+      </div>
+
+      {topPosts.length > 0 && (
+        <div className="evrion-analytics-section">
+          <div className="evrion-analytics-heading">Today's Page — most viewed posts</div>
+          {topPosts.map((p, i) => (
+            <div className="evrion-rank-row" key={p.id}>
+              <span>{i + 1}. {p.title}</span>
+              <span>{p.count} view{p.count !== 1 ? "s" : ""}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="evrion-analytics-section">
+        <div className="evrion-analytics-heading">Community — current totals</div>
+        <div className="evrion-rank-row"><span>Pending</span><span>{communityCurrent.pending || 0}</span></div>
+        <div className="evrion-rank-row"><span>Approved</span><span>{communityCurrent.approved || 0}</span></div>
+        <div className="evrion-rank-row"><span>Rejected</span><span>{communityCurrent.rejected || 0}</span></div>
+      </div>
+
+      <div className="evrion-analytics-section">
+        <div className="evrion-analytics-heading">Feedback — this period</div>
+        <div className="evrion-rank-row"><span>Total submitted</span><span>{feedbackEvents.length}</span></div>
+        {FEEDBACK_TYPES.map((t) => (
+          <div className="evrion-rank-row" key={t.id}><span>{t.label}</span><span>{feedbackByType[t.id] || 0}</span></div>
+        ))}
+        <div className="evrion-rank-row">
+          <span>Average rating</span>
+          <span>{avgRating != null ? `${avgRating.toFixed(1)}/10` : "No ratings yet"}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FeedbackTab() {
   const [items, setItems] = useState(null); // null = loading
   const [typeFilter, setTypeFilter] = useState("all");
@@ -3251,10 +3480,32 @@ export default function App() {
         setAdminLoggedIn(!!session);
       }
 
+      // Fires once per real browser tab-session — the sessionStorage flag
+      // survives page refreshes within the same tab, so reloading never
+      // creates a second session_started event.
+      try {
+        if (connected && !sessionStorage.getItem("evrion_session_flag")) {
+          const { isNew } = getOrCreateVisitorId();
+          trackEvent("session_started", { isNew });
+          sessionStorage.setItem("evrion_session_flag", "1");
+        }
+      } catch (e) {
+        /* ignore */
+      }
+
       setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // One page_view per screen navigation, not per re-render. Depends on
+  // `loading` too, so the very first screen (shown once content finishes
+  // loading) still gets its page_view — otherwise it'd be silently skipped
+  // since `loading` starts true before `view` ever changes.
+  useEffect(() => {
+    if (connected && !loading) trackEvent("page_view", { page: view });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, loading]);
 
   useEffect(() => {
     if (!connected) return undefined;
@@ -3285,6 +3536,7 @@ export default function App() {
     const { top, pct } = scorePersonalities(traitScores, content.personalities);
     setResult({ personality: top, pct, categoryId: category.id });
     setView("result");
+    trackEvent("quiz_completed", { categoryId: category.id, personalityId: top?.id });
   };
 
   const doShare = async () => {
@@ -3358,6 +3610,7 @@ export default function App() {
             onPick={(c) => {
               setCategory(c);
               setView("quiz");
+              trackEvent("quiz_started", { categoryId: c.id });
             }}
             onBack={goHome}
           />

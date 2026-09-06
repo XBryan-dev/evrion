@@ -211,3 +211,69 @@ export async function deleteFeedback(id) {
   const { error } = await supabase.from("feedback_items").delete().eq("id", id);
   if (error) throw error;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Analytics — a small, honest event-tracking foundation.              */
+/*  Fire-and-forget: a tracking failure must never break the app, and   */
+/*  it never blocks the UI waiting on a network round-trip.             */
+/* ------------------------------------------------------------------ */
+
+const VISITOR_ID_KEY = "evrion_visitor_id";
+const SESSION_ID_KEY = "evrion_session_id";
+
+/** A long-lived, anonymous, per-browser id. Returns whether it was just created (first-ever visit). */
+export function getOrCreateVisitorId() {
+  try {
+    let id = localStorage.getItem(VISITOR_ID_KEY);
+    let isNew = false;
+    if (!id) {
+      id = `vis_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem(VISITOR_ID_KEY, id);
+      isNew = true;
+    }
+    return { id, isNew };
+  } catch (e) {
+    return { id: `vis_${Date.now().toString(36)}`, isNew: true };
+  }
+}
+
+/** A per-tab-session id — persists across reloads within the same tab, cleared when the tab closes. */
+export function getOrCreateSessionId() {
+  try {
+    let id = sessionStorage.getItem(SESSION_ID_KEY);
+    if (!id) {
+      id = `sess_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      sessionStorage.setItem(SESSION_ID_KEY, id);
+    }
+    return id;
+  } catch (e) {
+    return `sess_${Date.now().toString(36)}`;
+  }
+}
+
+/** Records one analytics event. Never throws — a tracking hiccup should never break the app. */
+export async function trackEvent(eventType, metadata = {}) {
+  if (!supabase) return;
+  try {
+    const { id: visitorId } = getOrCreateVisitorId();
+    const sessionId = getOrCreateSessionId();
+    await supabase.from("analytics_events").insert({
+      event_type: eventType,
+      visitor_id: visitorId,
+      session_id: sessionId,
+      metadata,
+    });
+  } catch (e) {
+    /* analytics is never allowed to break the app */
+  }
+}
+
+/** Admin-only: raw events, optionally since a given ISO timestamp (omit for all-time). */
+export async function fetchAnalyticsEvents(sinceIso) {
+  if (!supabase) return [];
+  let query = supabase.from("analytics_events").select("*").order("created_at", { ascending: false });
+  if (sinceIso) query = query.gte("created_at", sinceIso);
+  const { data, error } = await query;
+  if (error || !data) return [];
+  return data;
+}
