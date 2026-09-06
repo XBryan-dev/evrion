@@ -1120,6 +1120,7 @@ function QuizView({ category, questions, answersByQuestion, onFinish, onBack }) 
   const [index, setIndex] = useState(0);
   const [traitScores, setTraitScores] = useState({});
   const [selectedId, setSelectedId] = useState(null);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   const question = active.length > 0 ? active[index] : null;
 
   useEffect(() => {
@@ -1130,6 +1131,28 @@ function QuizView({ category, questions, answersByQuestion, onFinish, onBack }) 
     if (question) trackEvent("situation_played", { questionId: question.id, questionTitle: question.title });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question?.id]);
+
+  // Intercept the browser/device back action while the quiz is active, so
+  // leaving accidentally (a swipe-back gesture, the hardware back button,
+  // etc.) always asks first instead of silently dropping progress.
+  useEffect(() => {
+    window.history.pushState({ evrionQuizGuard: true }, "");
+    const handlePopState = () => setShowExitConfirm(true);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  const requestExit = () => setShowExitConfirm(true);
+  const confirmContinue = () => {
+    // Restore the guard the back gesture just consumed, so it's still
+    // trapped for next time, then stay right where the user was.
+    window.history.pushState({ evrionQuizGuard: true }, "");
+    setShowExitConfirm(false);
+  };
+  const confirmExit = () => {
+    setShowExitConfirm(false);
+    onBack();
+  };
 
   if (active.length === 0) {
     return (
@@ -1164,7 +1187,15 @@ function QuizView({ category, questions, answersByQuestion, onFinish, onBack }) 
 
   return (
     <div>
-      <TopBar onBack={index === 0 ? onBack : () => setIndex(index - 1)} title={`Question ${index + 1} of ${active.length}`} />
+      <TopBar
+        onBack={index === 0 ? requestExit : () => setIndex(index - 1)}
+        title={`Question ${index + 1} of ${active.length}`}
+        right={
+          <button className="evrion-icon-btn" onClick={requestExit} aria-label="Exit quiz">
+            <X size={16} />
+          </button>
+        }
+      />
       <div style={{ padding: "0 20px" }}>
         <div className="evrion-progress-track">
           <div className="evrion-progress-fill" style={{ width: `${pct}%` }} />
@@ -1192,6 +1223,27 @@ function QuizView({ category, questions, answersByQuestion, onFinish, onBack }) 
           {answers.length === 0 && <div className="evrion-empty">No answers set for this situation yet.</div>}
         </div>
       </div>
+
+      {showExitConfirm && (
+        <div className="evrion-modal-backdrop" onClick={confirmContinue}>
+          <div className="evrion-modal" onClick={(e) => e.stopPropagation()}>
+            <div style={{ textAlign: "center", padding: "10px 0 4px" }}>
+              <div className="evrion-wordmark" style={{ fontSize: 19, marginBottom: 8 }}>Leave quiz?</div>
+              <p style={{ fontSize: 14, opacity: 0.75, lineHeight: 1.5, marginBottom: 22 }}>
+                Your progress will be lost.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={confirmContinue}>
+                  Continue
+                </button>
+                <button className="evrion-btn evrion-btn-secondary evrion-btn-block" onClick={confirmExit}>
+                  Exit
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3589,6 +3641,21 @@ export default function App() {
   };
 
   const initializeContent = async () => {
+    // Safety re-check: `synced` can go false from a transient load hiccup,
+    // not only a genuinely empty database — so before ever overwriting
+    // anything, re-fetch fresh and abort if real content already exists
+    // anywhere (this is what actually protects Today's Page posts, and
+    // everything else, from being silently wiped).
+    const fresh = await loadContent();
+    if (fresh) {
+      setContent(migrateTodayContent(fresh));
+      setSynced(true);
+      alert("Found existing content in Supabase — loaded that instead of overwriting it.");
+      return;
+    }
+    if (!confirm("This will set up starter content in an EMPTY Supabase database. If you believe you already have content, press Cancel instead. Continue?")) {
+      return;
+    }
     const seed = buildSeedContent();
     setContent(seed);
     try {
