@@ -22,10 +22,11 @@ done through a website UI, not the command line, except two `npm` commands.
 4. Paste in the contents of `supabase-setup.sql` (in this folder) and click **Run**.
    This creates the `evrion_content` table and locks it so anyone can read the
    quiz, but only a logged-in user (you) can edit it.
-5. Run **New query** again, paste in `supabase-today-page.sql`, and click **Run**.
-   This adds one more table that lets Today's Page polls work — anyone can
-   vote and see results, but nobody can edit or delete a vote through the app
-   (no new login is introduced by this).
+5. Run **New query** again and, one at a time, paste in and run each of:
+   - `supabase-today-page.sql` — poll voting table
+   - `supabase-today-page-v2.sql` — lets a visitor change or remove their poll vote
+   - `supabase-today-media-bucket.sql` — storage for direct image/video uploads on Today's Page
+   - `supabase-community-submissions.sql` — community-submitted situations + their optional photo uploads
 6. Go to **Authentication → Users → Add user** and create yourself an account
    (your email + a password). This is your one admin login — don't enable public
    sign-ups anywhere.
@@ -93,20 +94,70 @@ load the starter quiz.
 
 ---
 
-## Today's Page (new in V1.1)
+## Today's Page (V1.1)
 
-Today's Page is EVRION's content-driven daily front page. From Admin → **Today's Page**:
+Today's Page is EVRION's content-driven daily front page, and **every post on
+it is fully independent** — its own id, date, content, status, and timestamps.
+Publishing, unpublishing, editing, previewing, or deleting one post never
+touches any other post, even ones on the same date. There is no shared
+"day status" anymore.
 
-- Pick a date, add blocks (Text, Image, Video, Poll, Situation, Announcement/Feature, Button/Link), reorder them, edit or remove any of them.
-- **Preview** shows exactly what the public page will look like before you commit to anything.
-- **Save draft** keeps your work without showing it to visitors.
-- **Publish** makes that date's page live at the public "🗓 Today's Page" link on the home screen.
+From Admin → **Today's Page**:
 
-If nobody has published *today's* date yet, visitors automatically see the most recently published page instead of a blank screen (with a small note showing which date they're looking at) — so the page never goes empty just because you didn't publish that exact morning.
+- Pick a date to manage that date's posts.
+- **+** adds a new post (Text, Image, Video, Poll, Situation, Announcement/Feature, or Button/Link). A new post isn't saved until you tap either **Save as draft** or **Publish now** in its editor.
+- Each existing post has its own row with its own **Preview**, **Edit**, **Publish/Unpublish**, and **Delete** — and its own **Draft**/**Live** status shown right on the row.
+- Reorder posts within a date with the up/down arrows.
+- **Preview** always shows that one post exactly as the public page will render it — it never changes its status, so previewing a draft can never accidentally make it live.
 
-Today's Page uses its own visual language (deep midnight background, electric violet, warm orange accents) — a first look at where EVRION's overall design is headed, without touching the rest of the app yet.
+The public "🗓 Today's Page" link shows only posts whose individual status is
+**Live**, for today's date, in the order you set. If nothing is published for
+today specifically, it falls back to the most recent date that has any live
+posts, with a small note showing which date is being shown, rather than
+displaying a blank page.
 
-Adding a new block type later means adding one entry to `TODAY_BLOCK_TYPES`, one case in `defaultBlockData`, one render case in `TodayBlockPublic`, and one form section in `TodayBlockEditModal` — Today's Page itself doesn't need to change.
+**Media uploads:** Image and Video posts let you upload a file straight from
+your device (phone gallery or desktop file picker) — you'll see a preview
+before saving. Pasting a URL instead is still supported as an alternative.
+Uploaded files are stored in a Supabase Storage bucket called `today-media`
+(set up by `supabase-today-media-bucket.sql`) — publicly viewable, but only
+your logged-in admin session can upload to it.
+
+**Polls:** Voting is anonymous (no login) but tied to a random per-browser id
+stored on the visitor's device, so they can change their mind or remove their
+vote entirely — their vote gets updated in place rather than stacking up as
+extra votes.
+
+Adding a new post type later means adding one entry to `TODAY_BLOCK_TYPES`,
+one case in `defaultBlockData`, one render case in `TodayBlockPublic`, and one
+form section in `TodayBlockEditModal` — nothing about how posts are stored,
+published, or displayed needs to change.
+
+## Community-submitted situations (V1.1)
+
+Anyone can tap **✍️ Submit a situation** on the home screen and contribute a
+title, scenario, and a few answer options (with an optional photo) — but
+nothing they submit ever becomes public on its own. Every submission is its
+own independent record with its own status: **Pending**, **Approved**, or
+**Rejected**.
+
+From Admin → **Community**:
+
+- Submissions are grouped into Pending / Approved / Rejected tabs.
+- Each one has its own **Preview**, **Edit**, **Approve**, **Reject**, and **Delete** — acting on one never touches any other.
+- **Edit** lets you clean up a submission before approving it — the edited version is what gets approved, not the original.
+
+Approving a submission doesn't publish anything by itself. It just makes that
+situation available for you to actually use — right now, that means Today's
+Page's "Add a post" screen has an **"Import from an approved community
+submission"** option, which pre-fills a new (still-draft) Situation post from
+it. You still explicitly save/publish it like any other post — nothing goes
+live automatically just because it was approved.
+
+This is intentionally just the foundation: no profiles, voting, likes, or
+credited authorship yet — the data model (one independent record per
+submission, in its own table) is built so those can be layered on later
+without changing how existing submissions are stored.
 
 ## Editing the quiz after launch
 
