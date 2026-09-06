@@ -27,6 +27,7 @@ done through a website UI, not the command line, except two `npm` commands.
    - `supabase-today-page-v2.sql` — lets a visitor change or remove their poll vote
    - `supabase-today-media-bucket.sql` — storage for direct image/video uploads on Today's Page
    - `supabase-community-submissions.sql` — community-submitted situations + their optional photo uploads
+   - `supabase-feedback.sql` — the feedback system
 6. Go to **Authentication → Users → Add user** and create yourself an account
    (your email + a password). This is your one admin login — don't enable public
    sign-ups anywhere.
@@ -158,6 +159,28 @@ This is intentionally just the foundation: no profiles, voting, likes, or
 credited authorship yet — the data model (one independent record per
 submission, in its own table) is built so those can be layered on later
 without changing how existing submissions are stored.
+
+## Feedback system (V1.1)
+
+A small gold 💬 button floats in the corner on every public screen (not shown
+while you're in Admin) — tapping it opens a quick form: pick a type (Bug,
+Suggestion, Complaint, Liked something, General), write a message, optionally
+rate EVRION 1–10, and send. It confirms receipt without promising a fix, and
+automatically records which screen it was submitted from and basic device
+info — no extra typing required from the person giving feedback, and nothing
+invasive collected.
+
+From Admin → **Feedback**:
+
+- Filter by type, status, rating, or exact date, plus a free-text search over feedback messages.
+- Each item has its own status — **New**, **Reviewing**, **Resolved**, or **Dismissed** — changed independently of every other item.
+- **View** shows the full message plus its context (page, timestamp, device) in one place.
+- Delete removes exactly the one item you're looking at.
+
+Feedback is deliberately a separate table and separate admin section from
+Community Situations — one is product feedback, the other is content people
+want to contribute — even though both follow the same "many independent
+records, not one shared status" shape under the hood.
 
 ## Editing the quiz after launch
 
