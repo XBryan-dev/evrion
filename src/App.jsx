@@ -16,7 +16,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
-import { loadContent, saveContent, signIn, signOut, getSession, castVote, fetchVoteCounts } from "./storage";
+import { loadContent, saveContent, signIn, signOut, getSession, castOrChangeVote, removeVote, fetchVoteCounts, getVoterId, uploadMedia } from "./storage";
 
 /* ------------------------------------------------------------------ */
 /*  EVRION — "What type of Cameroonian are you?"                      */
@@ -326,44 +326,75 @@ function buildSeedContent() {
   });
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const todayPages = [
-    {
-      id: uid("tp"),
-      date: todayStr,
-      status: "published",
-      blocks: [
-        {
-          id: uid("blk"),
-          type: "announcement",
-          badge: "NEW",
-          title: "Welcome to Today's Page",
-          body: "This is EVRION's living front page — new stuff drops here, edited from Admin, no rebuild needed.",
-          ctaLabel: "Take the vibe check",
-          ctaUrl: "",
-        },
-        {
-          id: uid("blk"),
-          type: "situation",
-          title: "The Data Bundle",
-          format: "quick",
-          prompt: "Your data finishes mid-video call. How you go react?",
-          chat: [],
-        },
-        {
-          id: uid("blk"),
-          type: "poll",
-          question: "Who's more likely to say 'I dey come' and disappear?",
-          options: [
-            { id: uid("opt"), text: "My guy" },
-            { id: uid("opt"), text: "My cousin" },
-            { id: uid("opt"), text: "Honestly, me" },
-          ],
-        },
+  const nowIso = new Date().toISOString();
+  const makePost = (fields) => ({
+    id: uid("post"),
+    date: todayStr,
+    status: "live",
+    order: 0,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    ...fields,
+  });
+  const todayPosts = [
+    makePost({
+      order: 1,
+      type: "announcement",
+      badge: "NEW",
+      title: "Welcome to Today's Page",
+      body: "This is EVRION's living front page — new posts drop here, each one editable and publishable independently from Admin, no rebuild needed.",
+      ctaLabel: "Take the vibe check",
+      ctaUrl: "",
+    }),
+    makePost({
+      order: 2,
+      type: "situation",
+      title: "The Data Bundle",
+      format: "quick",
+      prompt: "Your data finishes mid-video call. How you go react?",
+      chat: [],
+    }),
+    makePost({
+      order: 3,
+      type: "poll",
+      question: "Who's more likely to say 'I dey come' and disappear?",
+      options: [
+        { id: uid("opt"), text: "My guy" },
+        { id: uid("opt"), text: "My cousin" },
+        { id: uid("opt"), text: "Honestly, me" },
       ],
-    },
+    }),
   ];
 
-  return { categories, questions, answers, traits, personalities, todayPages };
+  return { categories, questions, answers, traits, personalities, todayPosts };
+}
+
+/**
+ * One-time, in-memory migration from the old "one page holds many blocks
+ * that all share one status" shape to independent posts. Runs whenever
+ * older saved content (from before this update) is loaded; harmless no-op
+ * on anything already in the new shape.
+ */
+function migrateTodayContent(content) {
+  if (content.todayPosts) return content; // already migrated / already new
+  if (!content.todayPages) return { ...content, todayPosts: [] };
+
+  const nowIso = new Date().toISOString();
+  const todayPosts = [];
+  content.todayPages.forEach((page) => {
+    (page.blocks || []).forEach((block, idx) => {
+      todayPosts.push({
+        ...block,
+        date: page.date,
+        status: page.status === "published" ? "live" : "draft",
+        order: idx + 1,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      });
+    });
+  });
+  const { todayPages, ...rest } = content;
+  return { ...rest, todayPosts };
 }
 
 /* ------------------------------- Share token ------------------------------- */
@@ -1167,22 +1198,45 @@ function PollBlockPublic({ block, pageDate }) {
   }, [block.id]);
 
   useEffect(() => {
-    if (votedOption) refreshCounts();
-  }, [votedOption, refreshCounts]);
+    refreshCounts();
+  }, [refreshCounts]);
+
+  const rememberLocally = (optionId) => {
+    try {
+      if (optionId) localStorage.setItem(`evrion_voted_${block.id}`, optionId);
+      else localStorage.removeItem(`evrion_voted_${block.id}`);
+    } catch (e) {
+      /* ignore */
+    }
+  };
 
   const vote = async (optionId) => {
-    if (votedOption || busy) return;
+    if (busy || optionId === votedOption) return;
     setBusy(true);
+    const previous = votedOption;
+    setVotedOption(optionId); // optimistic
     try {
-      await castVote(pageDate, block.id, optionId);
-      try {
-        localStorage.setItem(`evrion_voted_${block.id}`, optionId);
-      } catch (e) {
-        /* ignore */
-      }
-      setVotedOption(optionId);
+      await castOrChangeVote(pageDate, block.id, optionId);
+      rememberLocally(optionId);
+      await refreshCounts();
     } catch (e) {
-      /* silently ignore — voting is a nice-to-have, not critical */
+      setVotedOption(previous); // roll back on failure
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clearVote = async () => {
+    if (busy || !votedOption) return;
+    setBusy(true);
+    const previous = votedOption;
+    setVotedOption(null); // optimistic
+    try {
+      await removeVote(block.id);
+      rememberLocally(null);
+      await refreshCounts();
+    } catch (e) {
+      setVotedOption(previous);
     } finally {
       setBusy(false);
     }
@@ -1196,18 +1250,34 @@ function PollBlockPublic({ block, pageDate }) {
       {(block.options || []).map((opt) => {
         const optCount = counts?.[opt.id] || 0;
         const pct = total > 0 ? Math.round((optCount / total) * 100) : 0;
+        const isMine = votedOption === opt.id;
         return (
-          <button key={opt.id} className="evtoday-poll-option" onClick={() => vote(opt.id)} disabled={!!votedOption}>
+          <button
+            key={opt.id}
+            className="evtoday-poll-option"
+            style={isMine ? { borderColor: "#8B5CF6", background: "rgba(139,92,246,0.22)" } : undefined}
+            onClick={() => vote(opt.id)}
+            disabled={busy}
+          >
             {votedOption && <div className="evtoday-poll-fill" style={{ width: `${pct}%` }} />}
             <div className="evtoday-poll-option-inner">
-              <span>{opt.text}</span>
+              <span>{isMine ? "✓ " : ""}{opt.text}</span>
               {votedOption && <span>{pct}%</span>}
             </div>
           </button>
         );
       })}
-      <div className="evtoday-poll-note">
-        {votedOption ? `${total} vote${total !== 1 ? "s" : ""} so far` : "Tap to vote"}
+      <div className="evtoday-poll-note" style={{ display: "flex", justifyContent: "space-between" }}>
+        <span>{total} vote{total !== 1 ? "s" : ""} so far</span>
+        {votedOption && (
+          <button
+            onClick={clearVote}
+            disabled={busy}
+            style={{ background: "none", border: "none", color: "#C4AEFF", fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: 0 }}
+          >
+            Remove my vote
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1293,16 +1363,26 @@ function TodayBlockPublic({ block, pageDate, onNavigate }) {
 }
 
 function TodayPageView({ content, onBack, onGoCategories }) {
-  const pages = content.todayPages || [];
+  const posts = content.todayPosts || [];
   const todayStr = todaysDateString();
 
-  const exact = pages.find((p) => p.date === todayStr && p.status === "published");
-  const fallback = !exact
-    ? pages
-        .filter((p) => p.status === "published" && p.date <= todayStr)
-        .sort((a, b) => (a.date < b.date ? 1 : -1))[0]
-    : null;
-  const page = exact || fallback;
+  const livePosts = posts.filter((p) => p.status === "live");
+  const exactPosts = livePosts.filter((p) => p.date === todayStr).sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  let shownPosts = exactPosts;
+  let shownDate = todayStr;
+  let isFallback = false;
+
+  if (exactPosts.length === 0) {
+    const pastDates = [...new Set(livePosts.filter((p) => p.date <= todayStr).map((p) => p.date))].sort((a, b) => (a < b ? 1 : -1));
+    if (pastDates.length > 0) {
+      shownDate = pastDates[0];
+      shownPosts = livePosts.filter((p) => p.date === shownDate).sort((a, b) => (a.order || 0) - (b.order || 0));
+      isFallback = true;
+    } else {
+      shownPosts = [];
+    }
+  }
 
   return (
     <div className="evtoday-root" style={{ minHeight: "100%", display: "flex", flexDirection: "column" }}>
@@ -1312,18 +1392,18 @@ function TodayPageView({ content, onBack, onGoCategories }) {
         <div className="evrion-wordmark" style={{ fontSize: 22, color: "#EDEBFA" }}>EVRION</div>
       </div>
 
-      {!page && (
+      {shownPosts.length === 0 && (
         <div className="evtoday-empty">Nothing here yet — check back soon.</div>
       )}
 
-      {page && !exact && (
-        <div className="evtoday-fallback-note">Showing {page.date}'s page</div>
+      {shownPosts.length > 0 && isFallback && (
+        <div className="evtoday-fallback-note">Showing {shownDate}'s posts</div>
       )}
 
-      {page && (
+      {shownPosts.length > 0 && (
         <div style={{ paddingTop: 8, paddingBottom: 24 }}>
-          {(page.blocks || []).map((block) => (
-            <TodayBlockPublic key={block.id} block={block} pageDate={page.date} onNavigate={onGoCategories} />
+          {shownPosts.map((post) => (
+            <TodayBlockPublic key={post.id} block={post} pageDate={shownDate} onNavigate={onGoCategories} />
           ))}
         </div>
       )}
@@ -1482,150 +1562,156 @@ function SectionHeader({ label, onAdd }) {
 }
 
 function TodayPageTab({ content, save }) {
-  const pages = content.todayPages || [];
+  const posts = content.todayPosts || [];
   const [date, setDate] = useState(todaysDateString());
-  const existing = pages.find((p) => p.date === date);
-  const [blocks, setBlocks] = useState(existing?.blocks || []);
-  const [status, setStatus] = useState(existing?.status || "draft");
-  const [blockModal, setBlockModal] = useState(null); // { block, isNew }
-  const [showPreview, setShowPreview] = useState(false);
+  const [postModal, setPostModal] = useState(null); // { post, mode: 'new' | 'edit' }
+  const [previewPost, setPreviewPost] = useState(null);
   const [addPicker, setAddPicker] = useState(false);
-  const [savedFlash, setSavedFlash] = useState("");
+  const [flash, setFlash] = useState("");
 
-  // When the selected date changes, load that date's existing page (or start blank).
-  const switchDate = (newDate) => {
-    setDate(newDate);
-    const found = pages.find((p) => p.date === newDate);
-    setBlocks(found?.blocks || []);
-    setStatus(found?.status || "draft");
+  const postsForDate = posts.filter((p) => p.date === date).sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  const flashMsg = (msg) => {
+    setFlash(msg);
+    setTimeout(() => setFlash(""), 1600);
   };
 
-  const persistPage = (nextBlocks, nextStatus) => {
-    const pageId = existing?.id || uid("tp");
-    const nextPage = { id: pageId, date, status: nextStatus, blocks: nextBlocks };
-    const others = pages.filter((p) => p.date !== date);
-    save({ ...content, todayPages: [...others, nextPage] });
+  // Persists ONE post — every other post in the array is passed through untouched.
+  // This is the core guarantee: no post's save/publish/delete ever touches another.
+  const upsertPost = (post) => {
+    const exists = posts.some((p) => p.id === post.id);
+    const nextPosts = exists ? posts.map((p) => (p.id === post.id ? post : p)) : [...posts, post];
+    save({ ...content, todayPosts: nextPosts });
   };
 
-  const saveDraft = () => {
-    persistPage(blocks, status === "published" ? "published" : "draft");
-    setSavedFlash("Saved");
-    setTimeout(() => setSavedFlash(""), 1800);
+  const deletePost = (postId) => {
+    if (!confirm("Delete this post? This only removes this one post.")) return;
+    save({ ...content, todayPosts: posts.filter((p) => p.id !== postId) });
+    flashMsg("Deleted");
   };
 
-  const publish = () => {
-    setStatus("published");
-    persistPage(blocks, "published");
-    setSavedFlash("Published!");
-    setTimeout(() => setSavedFlash(""), 1800);
+  const setPostStatus = (post, status) => {
+    upsertPost({ ...post, status, updatedAt: new Date().toISOString() });
+    flashMsg(status === "live" ? "Published" : "Unpublished");
   };
 
-  const unpublish = () => {
-    setStatus("draft");
-    persistPage(blocks, "draft");
-  };
-
-  const addBlock = (type) => {
-    setAddPicker(false);
-    setBlockModal({ block: defaultBlockData(type), isNew: true });
-  };
-
-  const editBlock = (block) => setBlockModal({ block, isNew: false });
-
-  const saveBlockFromModal = (updatedBlock) => {
-    const exists = blocks.some((b) => b.id === updatedBlock.id);
-    setBlocks(exists ? blocks.map((b) => (b.id === updatedBlock.id ? updatedBlock : b)) : [...blocks, updatedBlock]);
-    setBlockModal(null);
-  };
-
-  const removeBlock = (id) => {
-    if (!confirm("Remove this block from the page?")) return;
-    setBlocks(blocks.filter((b) => b.id !== id));
-  };
-
-  const moveBlock = (idx, dir) => {
-    const next = blocks.slice();
+  const movePost = (idx, dir) => {
     const target = idx + dir;
-    if (target < 0 || target >= next.length) return;
-    [next[idx], next[target]] = [next[target], next[idx]];
-    setBlocks(next);
+    if (target < 0 || target >= postsForDate.length) return;
+    const a = postsForDate[idx];
+    const b = postsForDate[target];
+    const nextPosts = posts.map((p) => {
+      if (p.id === a.id) return { ...p, order: b.order };
+      if (p.id === b.id) return { ...p, order: a.order };
+      return p;
+    });
+    save({ ...content, todayPosts: nextPosts });
   };
 
-  const otherDates = pages
-    .map((p) => ({ date: p.date, status: p.status }))
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  const openNewPostPicker = () => setAddPicker(true);
 
-  const previewPage = { date, status, blocks };
+  const startNewPost = (type) => {
+    setAddPicker(false);
+    const maxOrder = postsForDate.reduce((m, p) => Math.max(m, p.order || 0), 0);
+    const nowIso = new Date().toISOString();
+    const fresh = {
+      ...defaultBlockData(type),
+      date,
+      status: "draft",
+      order: maxOrder + 1,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    setPostModal({ post: fresh, mode: "new" });
+  };
+
+  const otherDates = [...new Set(posts.map((p) => p.date))].sort((a, b) => (a < b ? 1 : -1));
 
   return (
     <div>
       <div className="evrion-field">
-        <label className="evrion-label">Editing page for</label>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input type="date" className="evrion-input" value={date} onChange={(e) => switchDate(e.target.value)} />
-          <span className={`evrion-status-pill ${status === "published" ? "published" : "draft"}`}>
-            {status === "published" ? "Live" : "Draft"}
-          </span>
-        </div>
+        <label className="evrion-label">Managing posts for</label>
+        <input type="date" className="evrion-input" value={date} onChange={(e) => setDate(e.target.value)} />
         {otherDates.length > 0 && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
-            {otherDates.map((p) => (
-              <button
-                key={p.date}
-                className="evrion-tab"
-                style={{ fontSize: 11.5, padding: "5px 10px" }}
-                onClick={() => switchDate(p.date)}
-              >
-                {p.date} {p.status === "published" ? "🟢" : "⚪"}
-              </button>
-            ))}
+            {otherDates.map((d) => {
+              const count = posts.filter((p) => p.date === d).length;
+              const liveCount = posts.filter((p) => p.date === d && p.status === "live").length;
+              return (
+                <button key={d} className="evrion-tab" style={{ fontSize: 11.5, padding: "5px 10px" }} onClick={() => setDate(d)}>
+                  {d} · {liveCount}/{count} live
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
 
-      <SectionHeader label={`Blocks (${blocks.length})`} onAdd={() => setAddPicker(true)} />
+      <SectionHeader label={`Posts on ${date} (${postsForDate.length})`} onAdd={openNewPostPicker} />
 
-      {blocks.length === 0 && <div className="evrion-empty">No blocks yet — tap + to add one.</div>}
+      {postsForDate.length === 0 && <div className="evrion-empty">No posts for this date yet — tap + to add one.</div>}
 
-      {blocks.map((b, idx) => {
-        const meta = TODAY_BLOCK_TYPES.find((t) => t.type === b.type);
-        const snippet = b.title || b.heading || b.question || b.body || b.label || b.caption || "(untitled)";
+      {postsForDate.map((post, idx) => {
+        const meta = TODAY_BLOCK_TYPES.find((t) => t.type === post.type);
+        const snippet = post.title || post.heading || post.question || post.body || post.label || post.caption || "(untitled)";
         return (
-          <div className="evrion-today-admin-block" key={b.id}>
+          <div className="evrion-today-admin-block" key={post.id}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
               <div style={{ minWidth: 0 }}>
-                <span className="evrion-today-type-tag">{meta?.label || b.type}</span>
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                  <span className="evrion-today-type-tag">{meta?.label || post.type}</span>
+                  <span className={`evrion-status-pill ${post.status === "live" ? "published" : "draft"}`}>
+                    {post.status === "live" ? "Live" : "Draft"}
+                  </span>
+                </div>
                 <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {snippet}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                <button className="evrion-icon-btn" onClick={() => moveBlock(idx, -1)} disabled={idx === 0}><ChevronLeft size={13} style={{ transform: "rotate(90deg)" }} /></button>
-                <button className="evrion-icon-btn" onClick={() => moveBlock(idx, 1)} disabled={idx === blocks.length - 1}><ChevronLeft size={13} style={{ transform: "rotate(-90deg)" }} /></button>
-                <button className="evrion-icon-btn" onClick={() => editBlock(b)}><Pencil size={13} /></button>
-                <button className="evrion-icon-btn danger" onClick={() => removeBlock(b.id)}><Trash2 size={13} /></button>
+              <div style={{ display: "flex", gap: 4, flexShrink: 0, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <button className="evrion-icon-btn" onClick={() => movePost(idx, -1)} disabled={idx === 0} title="Move up">
+                  <ChevronLeft size={13} style={{ transform: "rotate(90deg)" }} />
+                </button>
+                <button className="evrion-icon-btn" onClick={() => movePost(idx, 1)} disabled={idx === postsForDate.length - 1} title="Move down">
+                  <ChevronLeft size={13} style={{ transform: "rotate(-90deg)" }} />
+                </button>
               </div>
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+              <button className="evrion-btn evrion-btn-secondary" style={{ fontSize: 12, padding: "7px 11px" }} onClick={() => setPreviewPost(post)}>
+                Preview
+              </button>
+              <button
+                className="evrion-btn evrion-btn-secondary"
+                style={{ fontSize: 12, padding: "7px 11px" }}
+                onClick={() => setPostModal({ post, mode: "edit" })}
+              >
+                Edit
+              </button>
+              {post.status === "live" ? (
+                <button className="evrion-btn evrion-btn-danger" style={{ fontSize: 12, padding: "7px 11px" }} onClick={() => setPostStatus(post, "draft")}>
+                  Unpublish
+                </button>
+              ) : (
+                <button className="evrion-btn evrion-btn-primary" style={{ fontSize: 12, padding: "7px 11px" }} onClick={() => setPostStatus(post, "live")}>
+                  Publish
+                </button>
+              )}
+              <button className="evrion-icon-btn danger" onClick={() => deletePost(post.id)} title="Delete this post">
+                <Trash2 size={14} />
+              </button>
             </div>
           </div>
         );
       })}
 
-      <div style={{ display: "flex", gap: 8, marginTop: 18, flexWrap: "wrap" }}>
-        <button className="evrion-btn evrion-btn-secondary" style={{ flex: 1 }} onClick={() => setShowPreview(true)}>Preview</button>
-        <button className="evrion-btn evrion-btn-secondary" style={{ flex: 1 }} onClick={saveDraft}>Save draft</button>
-        {status === "published" ? (
-          <button className="evrion-btn evrion-btn-danger" style={{ flex: 1 }} onClick={unpublish}>Unpublish</button>
-        ) : (
-          <button className="evrion-btn evrion-btn-primary" style={{ flex: 1 }} onClick={publish}>Publish</button>
-        )}
-      </div>
-      {savedFlash && <div style={{ textAlign: "center", fontSize: 12.5, color: "#E7B10A", marginTop: 8, fontWeight: 700 }}>{savedFlash}</div>}
+      {flash && <div style={{ textAlign: "center", fontSize: 12.5, color: "#E7B10A", marginTop: 10, fontWeight: 700 }}>{flash}</div>}
 
       {addPicker && (
-        <ModalShell title="Add a block" close={() => setAddPicker(false)}>
+        <ModalShell title="Add a post" close={() => setAddPicker(false)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {TODAY_BLOCK_TYPES.map((t) => (
-              <button key={t.type} className="evrion-answer" onClick={() => addBlock(t.type)}>
+              <button key={t.type} className="evrion-answer" onClick={() => startNewPost(t.type)}>
                 {t.label}
               </button>
             ))}
@@ -1633,32 +1719,44 @@ function TodayPageTab({ content, save }) {
         </ModalShell>
       )}
 
-      {blockModal && (
+      {postModal && (
         <TodayBlockEditModal
-          block={blockModal.block}
-          close={() => setBlockModal(null)}
-          onSave={saveBlockFromModal}
+          post={postModal.post}
+          mode={postModal.mode}
+          close={() => setPostModal(null)}
+          onSaveDraft={(p) => {
+            upsertPost({ ...p, status: "draft", updatedAt: new Date().toISOString() });
+            setPostModal(null);
+            flashMsg("Saved as draft");
+          }}
+          onPublish={(p) => {
+            upsertPost({ ...p, status: "live", updatedAt: new Date().toISOString() });
+            setPostModal(null);
+            flashMsg("Published");
+          }}
+          onSaveChanges={(p) => {
+            upsertPost({ ...p, updatedAt: new Date().toISOString() }); // status untouched
+            setPostModal(null);
+            flashMsg("Saved");
+          }}
         />
       )}
 
-      {showPreview && (
-        <div className="evrion-modal-backdrop" onClick={() => setShowPreview(false)}>
+      {previewPost && (
+        <div className="evrion-modal-backdrop" onClick={() => setPreviewPost(null)}>
           <div className="evrion-modal" style={{ padding: 0, background: "transparent" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "flex-end", padding: "14px 14px 0" }}>
-              <button className="evrion-icon-btn" onClick={() => setShowPreview(false)} style={{ background: "rgba(0,0,0,0.4)" }}>
+              <button className="evrion-icon-btn" onClick={() => setPreviewPost(null)} style={{ background: "rgba(0,0,0,0.4)" }}>
                 <X size={16} />
               </button>
             </div>
             <div className="evtoday-root" style={{ borderRadius: 20, overflow: "hidden", maxHeight: "75vh", overflowY: "auto" }}>
               <div className="evtoday-header">
-                <div className="evtoday-eyebrow">Preview</div>
+                <div className="evtoday-eyebrow">Preview · this post only · {previewPost.status === "live" ? "Live" : "Draft"}</div>
                 <div className="evrion-wordmark" style={{ fontSize: 20, color: "#EDEBFA" }}>EVRION</div>
               </div>
               <div style={{ paddingTop: 8, paddingBottom: 24 }}>
-                {previewPage.blocks.map((block) => (
-                  <TodayBlockPublic key={block.id} block={block} pageDate={previewPage.date} onNavigate={() => {}} />
-                ))}
-                {previewPage.blocks.length === 0 && <div className="evtoday-empty">No blocks yet.</div>}
+                <TodayBlockPublic block={previewPost} pageDate={previewPost.date} onNavigate={() => {}} />
               </div>
             </div>
           </div>
@@ -1668,8 +1766,10 @@ function TodayPageTab({ content, save }) {
   );
 }
 
-function TodayBlockEditModal({ block, close, onSave }) {
-  const [draft, setDraft] = useState(block);
+function TodayBlockEditModal({ post, mode, close, onSaveDraft, onPublish, onSaveChanges }) {
+  const [draft, setDraft] = useState(post);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const set = (patch) => setDraft({ ...draft, ...patch });
 
   const meta = TODAY_BLOCK_TYPES.find((t) => t.type === draft.type);
@@ -1683,10 +1783,28 @@ function TodayBlockEditModal({ block, close, onSave }) {
   const addChatLine = () => set({ chat: [...(draft.chat || []), { from: "them", text: "" }] });
   const removeChatLine = (idx) => set({ chat: draft.chat.filter((_, i) => i !== idx) });
 
-  const submit = () => onSave(draft);
+  const handleFilePicked = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadError("");
+    try {
+      const url = await uploadMedia(file);
+      set({ url });
+    } catch (err) {
+      setUploadError(err.message || "Upload failed. You can paste a URL instead.");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
 
   return (
-    <ModalShell title={`${meta?.label || draft.type} block`} close={close}>
+    <ModalShell title={`${meta?.label || draft.type} post`} close={close}>
+      <div className={`evrion-status-pill ${draft.status === "live" ? "published" : "draft"}`} style={{ marginBottom: 14 }}>
+        {mode === "new" ? "Not saved yet" : draft.status === "live" ? "Currently Live" : "Currently Draft"}
+      </div>
+
       {draft.type === "text" && (
         <>
           <div className="evrion-field">
@@ -1703,9 +1821,21 @@ function TodayBlockEditModal({ block, close, onSave }) {
       {draft.type === "image" && (
         <>
           <div className="evrion-field">
-            <label className="evrion-label">Image URL</label>
+            <label className="evrion-label">Upload from your device</label>
+            <input type="file" accept="image/*" className="evrion-input" onChange={handleFilePicked} disabled={uploading} />
+            {uploading && <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>Uploading…</div>}
+            {uploadError && <div style={{ fontSize: 12, color: "#E9967A", marginTop: 6 }}>{uploadError}</div>}
+          </div>
+          <div className="evrion-field">
+            <label className="evrion-label">Or paste an image URL</label>
             <input className="evrion-input" value={draft.url} onChange={(e) => set({ url: e.target.value })} placeholder="https://..." />
           </div>
+          {draft.url && (
+            <div className="evrion-field">
+              <label className="evrion-label">Preview</label>
+              <img src={draft.url} alt="" style={{ width: "100%", borderRadius: 12 }} />
+            </div>
+          )}
           <div className="evrion-field">
             <label className="evrion-label">Caption (optional)</label>
             <input className="evrion-input" value={draft.caption} onChange={(e) => set({ caption: e.target.value })} />
@@ -1720,9 +1850,25 @@ function TodayBlockEditModal({ block, close, onSave }) {
       {draft.type === "video" && (
         <>
           <div className="evrion-field">
-            <label className="evrion-label">Video URL (YouTube, Vimeo, or direct .mp4 link)</label>
+            <label className="evrion-label">Upload from your device</label>
+            <input type="file" accept="video/*" className="evrion-input" onChange={handleFilePicked} disabled={uploading} />
+            {uploading && <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>Uploading…</div>}
+            {uploadError && <div style={{ fontSize: 12, color: "#E9967A", marginTop: 6 }}>{uploadError}</div>}
+          </div>
+          <div className="evrion-field">
+            <label className="evrion-label">Or paste a video URL (YouTube, Vimeo, or direct .mp4 link)</label>
             <input className="evrion-input" value={draft.url} onChange={(e) => set({ url: e.target.value })} placeholder="https://youtube.com/watch?v=..." />
           </div>
+          {draft.url && (
+            <div className="evrion-field">
+              <label className="evrion-label">Preview</label>
+              {videoEmbedUrl(draft.url) ? (
+                <iframe src={videoEmbedUrl(draft.url)} title="preview" style={{ width: "100%", aspectRatio: "16/9", borderRadius: 12 }} allowFullScreen />
+              ) : (
+                <video src={draft.url} controls style={{ width: "100%", borderRadius: 12 }} />
+              )}
+            </div>
+          )}
           <div className="evrion-field">
             <label className="evrion-label">Caption (optional)</label>
             <input className="evrion-input" value={draft.caption} onChange={(e) => set({ caption: e.target.value })} />
@@ -1838,7 +1984,22 @@ function TodayBlockEditModal({ block, close, onSave }) {
         </>
       )}
 
-      <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={submit}>Save block</button>
+      <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+        {mode === "new" ? (
+          <>
+            <button className="evrion-btn evrion-btn-secondary" style={{ flex: 1 }} onClick={() => onSaveDraft(draft)}>
+              Save as draft
+            </button>
+            <button className="evrion-btn evrion-btn-primary" style={{ flex: 1 }} onClick={() => onPublish(draft)}>
+              Publish now
+            </button>
+          </>
+        ) : (
+          <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={() => onSaveChanges(draft)}>
+            Save changes {draft.status === "live" ? "(stays live)" : "(stays draft)"}
+          </button>
+        )}
+      </div>
     </ModalShell>
   );
 }
@@ -2297,7 +2458,7 @@ export default function App() {
     (async () => {
       const remote = await loadContent();
       if (remote) {
-        setContent(remote);
+        setContent(migrateTodayContent(remote));
         setSynced(true);
       } else {
         setContent(buildSeedContent());

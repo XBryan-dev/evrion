@@ -41,12 +41,44 @@ export async function getSession() {
   return data.session;
 }
 
-/** Casts one anonymous vote on a Today's Page poll block. No login required. */
-export async function castVote(pageDate, blockId, optionId) {
+const VOTER_ID_KEY = "evrion_voter_id";
+
+/** A random, anonymous, per-browser id — not an account, just lets a vote be found again to change/remove. */
+export function getVoterId() {
+  try {
+    let id = localStorage.getItem(VOTER_ID_KEY);
+    if (!id) {
+      id = `v_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem(VOTER_ID_KEY, id);
+    }
+    return id;
+  } catch (e) {
+    return `v_${Date.now().toString(36)}`;
+  }
+}
+
+/** Casts a first vote or changes an existing one — never stacks multiple votes from the same browser. */
+export async function castOrChangeVote(pageDate, blockId, optionId) {
   if (!supabase) throw new Error("Supabase is not configured.");
+  const voterId = getVoterId();
   const { error } = await supabase
     .from("today_page_votes")
-    .insert({ page_date: pageDate, block_id: blockId, option_id: optionId });
+    .upsert(
+      { page_date: pageDate, block_id: blockId, option_id: optionId, voter_id: voterId, created_at: new Date().toISOString() },
+      { onConflict: "block_id,voter_id" }
+    );
+  if (error) throw error;
+}
+
+/** Removes this browser's vote from a poll entirely. */
+export async function removeVote(blockId) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const voterId = getVoterId();
+  const { error } = await supabase
+    .from("today_page_votes")
+    .delete()
+    .eq("block_id", blockId)
+    .eq("voter_id", voterId);
   if (error) throw error;
 }
 
@@ -63,4 +95,20 @@ export async function fetchVoteCounts(blockId) {
     counts[row.option_id] = (counts[row.option_id] || 0) + 1;
   });
   return counts;
+}
+
+const MEDIA_BUCKET = "today-media";
+
+/** Uploads an image/video file from the admin's device to Supabase Storage and returns its public URL. */
+export async function uploadMedia(file) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const path = `${Date.now()}-${safeName}`;
+  const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+  });
+  if (error) throw error;
+  const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
 }
