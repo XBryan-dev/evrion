@@ -267,6 +267,29 @@ Adding a new metric later mostly means adding one more small aggregation
 over the existing event log — the event vocabulary and table are built to
 be extended, not replaced.
 
+## Critical bug fixes (V1.1)
+
+Two things were fixed, and nothing else was touched:
+
+1. **Today's Page could lose all content.** The "Initialize content in
+   Supabase" button (shown when Admin couldn't confirm content had synced
+   yet) overwrote the *entire* content record — every Today's Page post on
+   every date, plus every question/category/personality — with fresh
+   starter data, with no check for whether real content already existed.
+   That banner can reappear from a plain transient load hiccup, not only a
+   genuinely empty database, so clicking it at the wrong moment was
+   destructive. It now re-checks Supabase immediately before doing
+   anything; if content is actually there, it loads that instead and
+   refuses to overwrite. The per-post data model itself (independent id,
+   date, status, timestamps per post) was already correct — this was the
+   one real hole in it.
+2. **No safe way to exit an unfinished quiz.** Quiz screens now have an
+   explicit close (✕) button, and the browser/device back action is
+   intercepted while a quiz is active — both surface a "Leave quiz? Your
+   progress will be lost." confirmation with Continue/Exit, rather than
+   requiring you to step backward through every question or lose progress
+   to an accidental back-swipe.
+
 ## Editing the quiz after launch
 
 Everything is done from the **Admin** panel (link at the bottom of the home
