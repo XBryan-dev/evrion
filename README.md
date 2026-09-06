@@ -29,6 +29,7 @@ done through a website UI, not the command line, except two `npm` commands.
    - `supabase-community-submissions.sql` — community-submitted situations + their optional photo uploads
    - `supabase-feedback.sql` — the feedback system
    - `supabase-analytics.sql` — the analytics event-tracking foundation
+   - `supabase-analytics-v2.sql` — fixes visitor/session counting (run this even if you already ran the first analytics file)
 6. Go to **Authentication → Users → Add user** and create yourself an account
    (your email + a password). This is your one admin login — don't enable public
    sign-ups anywhere.
@@ -182,6 +183,58 @@ Feedback is deliberately a separate table and separate admin section from
 Community Situations — one is product feedback, the other is content people
 want to contribute — even though both follow the same "many independent
 records, not one shared status" shape under the hood.
+
+## Analytics — the counting fix (V1.1)
+
+An earlier version of this feature had a real gap: sessions were tied to
+tab lifetime with no actual inactivity timeout, and there was no reliable
+way to stop an accidental duplicate insert from ever creating a second row
+for the same real action. Neither of those is true anymore — this section
+documents the corrected, precise rules, since analytics is worthless if the
+numbers can't be trusted.
+
+**Four distinct, never-conflated concepts:**
+
+- **Unique Visitors** — a random anonymous id stored in the visitor's own
+  browser (localStorage), created once and never regenerated. Refreshing,
+  navigating anywhere in EVRION, closing and reopening the browser, or
+  coming back days later — none of that creates a new visitor. The count
+  shown is the number of *distinct* visitor ids seen in the selected range.
+- **Sessions** — a period of continuous activity. A session ends only after
+  **30 minutes of inactivity**, not when a tab closes and not on
+  navigation. Moving between the quiz, Today's Page, and back stays the
+  same session throughout. The count shown is the number of *distinct*
+  session ids in the selected range.
+- **Page Views** — fired only on genuine top-level screen navigation (home
+  → categories → quiz → result, etc.). Answering another quiz question,
+  a component re-rendering, or an internal state change never counts as a
+  page view — the quiz stays one page view for its entire duration,
+  regardless of how many questions get answered inside it.
+- **Events** — specific product interactions (`quiz_started`,
+  `situation_played`, `feedback_submitted`, and so on) that can legitimately
+  happen many times in a single session without implying a new visitor or a
+  new session. The dashboard's "Events" number is the total count of these,
+  kept clearly separate from Page Views and Visitors so the two can never
+  be confused for each other.
+
+**Duplicate protection:** every recorded row gets a deterministic id built
+from the session, the event type, and (where relevant) what makes it a
+distinct occurrence — a category, a question, a short hash of submitted
+text — bucketed into a 2-second window. Two accidental fires of the exact
+same action within that window collapse into a single database row (the
+database itself refuses the second insert); two genuinely different
+actions, even seconds apart, are always counted separately.
+
+**Today's Page specifically:** the dashboard now shows both **Page views**
+(every genuine visit, including repeats from the same person) and **Unique
+visitors** (distinct people) side by side, so "I opened it five times" and
+"five different people opened it" are never presented as the same number.
+
+**If you tested the old version:** your `analytics_events` table may
+already contain contaminated numbers from before this fix. `supabase-
+analytics-v2.sql` has a commented-out `truncate table analytics_events;` —
+uncomment and run it yourself if you want a clean slate; nothing is wiped
+automatically.
 
 ## Analytics (V1.1)
 
