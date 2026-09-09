@@ -54,11 +54,11 @@ Open `.env.local` and paste in your Project URL and anon key from step 1.6.
 npm run dev
 ```
 
-Open the URL it prints (usually `http://localhost:5173`). Tap **Admin** on the
-home screen, sign in with the account you created, then click
-**"Initialize content in Supabase"** — this pushes the starter quiz (11
-situations, 5 personalities) into your database. From then on, everything you
-edit in Admin is saved there.
+Open the URL it prints (usually `http://localhost:5173`). Go to `/admin` on
+that local address (e.g. `http://localhost:5173/admin`), sign in with the
+account you created, then click **"Initialize content in Supabase"** — this
+pushes the starter quiz (11 situations, 5 personalities) into your database.
+From then on, everything you edit in Admin is saved there.
 
 ---
 
@@ -84,16 +84,17 @@ but the steps above need nothing installed beyond a browser.)
 1. Go to [vercel.com](https://vercel.com) → sign up with your GitHub account.
 2. Click **Add New → Project**, pick your `evrion` repository, click **Import**.
 3. Vercel will auto-detect it as a Vite project — leave the build settings as
-   they are.
+   they are. (`vercel.json` is already included in this project and handles
+   direct-URL routing like `/admin` correctly — nothing to configure.)
 4. Before deploying, open **Environment Variables** and add:
    - `VITE_SUPABASE_URL` → your Project URL
    - `VITE_SUPABASE_ANON_KEY` → your anon public key
 5. Click **Deploy**. In about a minute you'll get a live link like
    `evrion.vercel.app` — that's your real, public, shareable EVRION website.
 
-If you skipped the local step above, log into `/` on your live site, tap
-**Admin**, sign in, and click **"Initialize content in Supabase"** once to
-load the starter quiz.
+If you skipped the local step above, go to `/admin` on your live site (e.g.
+`https://your-site.vercel.app/admin`), sign in, and click
+**"Initialize content in Supabase"** once to load the starter quiz.
 
 ---
 
@@ -290,10 +291,47 @@ Two things were fixed, and nothing else was touched:
    requiring you to step backward through every question or lose progress
    to an accidental back-swipe.
 
+## Admin access (V1.1)
+
+There is no "Admin" button or link anywhere in the public site — that's
+intentional. Ordinary visitors have no way to discover it and no reason to
+try logging in. Your access is a direct URL instead:
+
+```
+https://your-site.vercel.app/admin
+```
+
+Bookmark that once and you're set. Log in with the email/password you
+created in Supabase Authentication, same as before — nothing about the login
+itself changed.
+
+**Want a less-guessable path?** Set `VITE_ADMIN_PATH` in your environment
+variables (Vercel → Settings → Environment Variables, same place as your
+Supabase keys) to something like `/evrion-owner`, then redeploy. Whatever you
+choose, visit `https://your-site.vercel.app/whatever-you-set`.
+
+**Being honest about what this does and doesn't protect against:** this
+removes the *invitation* — nobody browsing EVRION will ever see a reason to
+try admin access. It is not a secret in the cryptographic sense; the path
+does end up in the JavaScript your browser downloads, so someone determined
+enough to inspect it could still find it. That's true of any client-only app
+and isn't something a hidden URL can fix. Your actual protection — the part
+that matters if someone *does* find the URL — is unchanged and was already
+correct: they'd hit a real login form requiring the one email/password you
+created in Supabase, and the database itself (via the RLS policies in every
+`.sql` file here) refuses any write from a session that isn't authenticated.
+No admin secrets or privileged keys are ever shipped to the browser — only
+the public anon key, which is designed to be public and is meaningless
+without a real login for anything that writes data.
+
+If you'd rather have a second layer beyond "the URL isn't advertised," the
+next honest step up would be IP allowlisting or a Vercel-level password on
+that one route — worth considering later if EVRION grows, not necessary now.
+
 ## Editing the quiz after launch
 
-Everything is done from the **Admin** panel (link at the bottom of the home
-screen) — no redeploying needed:
+Everything is done from the **Admin** panel (see "Admin access" above for
+the URL) — no redeploying needed:
 
 - **Categories** — add new quiz categories any time (e.g. a future "Naija
   Life" or "Diaspora Life" category); the app automatically lists whatever is
