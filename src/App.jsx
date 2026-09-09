@@ -1038,7 +1038,7 @@ function ChatScene({ question }) {
 /*  Public views                                                       */
 /* ------------------------------------------------------------------ */
 
-function HomeView({ onStart, onAdmin, onToday, onSubmit }) {
+function HomeView({ onStart, onToday, onSubmit }) {
   return (
     <div className="evrion-scroll" style={{ display: "flex", flexDirection: "column", justifyContent: "center", minHeight: "100%" }}>
       <div style={{ textAlign: "center", marginBottom: 8 }}>
@@ -1073,13 +1073,6 @@ function HomeView({ onStart, onAdmin, onToday, onSubmit }) {
         style={{ background: "none", border: "none", color: "rgba(246,239,221,0.5)", fontSize: 12.5, marginTop: 16, cursor: "pointer", fontWeight: 700 }}
       >
         ✍️ Submit a situation
-      </button>
-
-      <button
-        onClick={onAdmin}
-        style={{ background: "none", border: "none", color: "rgba(246,239,221,0.35)", fontSize: 12, marginTop: 22, cursor: "pointer" }}
-      >
-        Admin
       </button>
     </div>
   );
@@ -1349,6 +1342,26 @@ function defaultBlockData(type) {
 
 function todaysDateString() {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Admin access is deliberately NOT linked anywhere in the public UI — the
+ * only way in is knowing this URL directly (bookmark it). Configurable via
+ * VITE_ADMIN_PATH so you can pick something less guessable than the
+ * default if you want; either way, the real security boundary is Supabase
+ * email/password auth + RLS, not the secrecy of this path — a determined
+ * person reading the shipped JS could still find it. This only stops
+ * ordinary visitors from ever being invited to try.
+ */
+function getAdminPath() {
+  const raw = (import.meta.env.VITE_ADMIN_PATH || "/admin").trim();
+  const withSlash = raw.startsWith("/") ? raw : `/${raw}`;
+  return withSlash.length > 1 ? withSlash.replace(/\/+$/, "") : withSlash;
+}
+function isOnAdminPath() {
+  if (typeof window === "undefined") return false;
+  const current = window.location.pathname.replace(/\/+$/, "") || "/";
+  return current === getAdminPath();
 }
 
 function videoEmbedUrl(url) {
@@ -3562,9 +3575,17 @@ export default function App() {
         }
       }
 
+      let isAdminSession = false;
       if (connected) {
         const session = await getSession();
-        setAdminLoggedIn(!!session);
+        isAdminSession = !!session;
+        setAdminLoggedIn(isAdminSession);
+      }
+
+      // The ONLY way into Admin: knowing this URL directly. Nothing in the
+      // public UI links here anymore.
+      if (isOnAdminPath()) {
+        setView(isAdminSession ? "adminHome" : "adminLogin");
       }
 
       // No manual session_started firing here anymore — trackEvent() itself
@@ -3610,7 +3631,9 @@ export default function App() {
     setView("home");
     setResult(null);
     setShareStatus("");
-    window.history.replaceState({}, "", window.location.pathname);
+    // Always reset to the real root — matters most when leaving Admin, so
+    // the address bar doesn't keep advertising the admin URL afterward.
+    window.history.replaceState({}, "", "/");
   };
 
   const finishQuiz = (traitScores) => {
@@ -3684,7 +3707,6 @@ export default function App() {
         {view === "home" && (
           <HomeView
             onStart={() => setView("categories")}
-            onAdmin={() => setView(adminLoggedIn ? "adminHome" : "adminLogin")}
             onToday={() => setView("today")}
             onSubmit={() => setView("submit")}
           />
