@@ -16,6 +16,12 @@ import {
   UploadCloud,
   MessageCircle,
   Search,
+  Home,
+  Gamepad2,
+  Compass,
+  Users,
+  User,
+  Bell,
 } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import {
@@ -804,6 +810,196 @@ const GlobalStyle = () => (
       margin-top: 3px;
       line-height: 1.3;
     }
+
+    /* ---------------------------------------------------------------- */
+    /*  Platform shell — header + bottom nav wrapping the hub screens    */
+    /*  (Home / Play / Discover / Community / Profile). Focused flows    */
+    /*  (quiz, result, admin, etc.) keep their existing TopBar/back-     */
+    /*  arrow pattern untouched and don't use this shell.                */
+    /* ---------------------------------------------------------------- */
+    .evrion-appshell-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px 14px;
+      flex-shrink: 0;
+    }
+    .evrion-appshell-header-icons {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .evrion-appshell-bottomnav {
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
+      background: #0F150B;
+      border-top: 1px solid rgba(246,239,221,0.08);
+    }
+    .evrion-tab-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      background: none;
+      border: none;
+      color: rgba(246,239,221,0.45);
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 6px 10px;
+      cursor: pointer;
+      touch-action: manipulation;
+      flex: 1;
+    }
+    .evrion-tab-item.active { color: #E7B10A; }
+
+    .evrion-hero {
+      position: relative;
+      margin: 0 20px 20px;
+      padding: 26px 20px 22px;
+      border-radius: 22px;
+      overflow: hidden;
+      background:
+        radial-gradient(120% 90% at 15% 0%, rgba(231,177,10,0.16) 0%, transparent 55%),
+        linear-gradient(155deg, #2A3E1C 0%, #16210F 55%, #0E1509 100%);
+      border: 1px solid rgba(246,239,221,0.08);
+    }
+    .evrion-hero-eyebrow {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #E7B10A;
+      opacity: 0.9;
+      margin-bottom: 8px;
+    }
+    .evrion-hero-title {
+      font-family: 'Archivo Black', sans-serif;
+      font-size: 23px;
+      line-height: 1.2;
+      color: #F6EFDD;
+      margin-bottom: 12px;
+    }
+    .evrion-hero-sub {
+      font-size: 13.5px;
+      line-height: 1.55;
+      opacity: 0.7;
+      margin-bottom: 18px;
+    }
+
+    .evrion-section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin: 0 20px 12px;
+    }
+    .evrion-section-title {
+      font-family: 'Archivo Black', sans-serif;
+      font-size: 16.5px;
+      color: #F6EFDD;
+    }
+    .evrion-section-see-all {
+      font-size: 12px;
+      font-weight: 700;
+      color: #E7B10A;
+      background: none;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+    .evrion-hscroll {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      padding: 0 20px 4px;
+      margin-bottom: 22px;
+    }
+    .evrion-hscroll::-webkit-scrollbar { display: none; }
+
+    .evrion-hub-card {
+      flex: 0 0 148px;
+      background: #1B2715;
+      border: 1px solid rgba(246,239,221,0.1);
+      border-radius: 16px;
+      padding: 14px;
+      text-align: left;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .evrion-hub-card-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      font-size: 16px;
+    }
+    .evrion-hub-card-title {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: #F6EFDD;
+      line-height: 1.3;
+      margin-bottom: 3px;
+    }
+    .evrion-hub-card-sub {
+      font-size: 11px;
+      opacity: 0.55;
+      line-height: 1.35;
+    }
+
+    .evrion-feature-card {
+      margin: 0 20px 16px;
+      background: #1B2715;
+      border: 1px solid rgba(246,239,221,0.1);
+      border-radius: 18px;
+      padding: 18px;
+      text-align: left;
+      cursor: pointer;
+      touch-action: manipulation;
+      display: block;
+      width: calc(100% - 40px);
+    }
+    .evrion-feature-card-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .evrion-coming-tile {
+      flex: 0 0 148px;
+      background: rgba(246,239,221,0.03);
+      border: 1.5px dashed rgba(246,239,221,0.14);
+      border-radius: 16px;
+      padding: 14px;
+      opacity: 0.55;
+    }
+    .evrion-coming-badge {
+      display: inline-block;
+      font-size: 9.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: rgba(246,239,221,0.5);
+      border: 1px solid rgba(246,239,221,0.2);
+      border-radius: 999px;
+      padding: 2px 7px;
+      margin-bottom: 20px;
+    }
+
+    .evrion-hub-empty {
+      margin: 40px 20px;
+      text-align: center;
+      opacity: 0.5;
+      font-size: 13.5px;
+      line-height: 1.6;
+    }
     .evrion-analytics-section {
       margin-bottom: 22px;
     }
@@ -1038,42 +1234,266 @@ function ChatScene({ question }) {
 /*  Public views                                                       */
 /* ------------------------------------------------------------------ */
 
-function HomeView({ onStart, onToday, onSubmit }) {
-  return (
-    <div className="evrion-scroll" style={{ display: "flex", flexDirection: "column", justifyContent: "center", minHeight: "100%" }}>
-      <div style={{ textAlign: "center", marginBottom: 8 }}>
-        <div className="evrion-wordmark" style={{ fontSize: 34, color: "#E7B10A" }}>EVRION</div>
-        <div style={{ fontSize: 13, letterSpacing: "0.04em", opacity: 0.6, marginTop: 2 }}>made for the vibes</div>
-      </div>
+/* ------------------------------------------------------------------ */
+/*  Platform shell — the persistent header + bottom nav that wraps the  */
+/*  hub screens (Home / Play / Discover / Community / Profile). This is */
+/*  EVRION's platform-level chrome; everything inside stays each hub's  */
+/*  own content. Focused flows (quiz, result, admin, etc.) render       */
+/*  outside this shell entirely, using their existing screens as-is.    */
+/* ------------------------------------------------------------------ */
 
-      <div style={{ marginTop: 34, marginBottom: 18 }}>
-        <div className="evrion-wordmark" style={{ fontSize: 28, lineHeight: 1.15, color: "#F6EFDD" }}>
-          What type of Cameroonian are you?
+const HUB_TABS = [
+  { id: "home", label: "Home", icon: Home },
+  { id: "play", label: "Play", icon: Gamepad2 },
+  { id: "discover", label: "Discover", icon: Compass },
+  { id: "community", label: "Community", icon: Users },
+  { id: "profile", label: "Profile", icon: User },
+];
+const HUB_IDS = HUB_TABS.map((t) => t.id);
+
+function PlatformShell({ activeTab, onTabChange, children }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div className="evrion-appshell-header">
+        <div className="evrion-wordmark" style={{ fontSize: 20, color: "#E7B10A" }}>EVRION</div>
+        <div className="evrion-appshell-header-icons">
+          <button className="evrion-icon-btn" aria-label="Search" title="Search — coming soon">
+            <Search size={16} />
+          </button>
+          <button className="evrion-icon-btn" aria-label="Notifications" title="Notifications — coming soon">
+            <Bell size={16} />
+          </button>
         </div>
       </div>
+      <div className="evrion-scroll" style={{ flex: 1, paddingLeft: 0, paddingRight: 0 }}>
+        {children}
+      </div>
+      <div className="evrion-appshell-bottomnav">
+        {HUB_TABS.map((t) => {
+          const Icon = t.icon;
+          return (
+            <button
+              key={t.id}
+              className={`evrion-tab-item ${activeTab === t.id ? "active" : ""}`}
+              onClick={() => onTabChange(t.id)}
+            >
+              <Icon size={19} />
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
-      <p style={{ fontSize: 15, lineHeight: 1.6, opacity: 0.75, marginBottom: 30 }}>
-        Not a test. Not general knowledge. Just those little situations that somehow expose you.
+function ComingSoonRow({ items }) {
+  return (
+    <div className="evrion-hscroll">
+      {items.map((label, i) => (
+        <div className="evrion-coming-tile" key={i}>
+          <div className="evrion-coming-badge">Coming soon</div>
+          <div className="evrion-hub-card-title">{label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Home — real EVRION functionality, presented as the platform's       */
+/*  dashboard hub. Every card here leads to a screen that already       */
+/*  works; nothing on this screen is a placeholder.                     */
+/* ------------------------------------------------------------------ */
+
+const HOME_SITUATION_TEASERS = [
+  { title: "I Dey Come", sub: "Respond to this one", icon: "⏳", bg: "rgba(139,92,246,0.22)" },
+  { title: "Weekend Plan", sub: "Share your move", icon: "📅", bg: "rgba(46,111,78,0.3)" },
+  { title: "Splitting The Bill", sub: "Fair or nah?", icon: "🧾", bg: "rgba(231,177,10,0.22)" },
+  { title: "Njangi Day", sub: "You know the drill", icon: "🤝", bg: "rgba(193,68,46,0.25)" },
+];
+
+function HomeView({ content, onStart, onToday, onSubmit }) {
+  const livePosts = (content.todayPosts || []).filter((p) => p.status === "live");
+  const todayStr = todaysDateString();
+  const todayCount = livePosts.filter((p) => p.date === todayStr).length || livePosts.length;
+
+  return (
+    <div style={{ paddingTop: 4, paddingBottom: 24 }}>
+      <div className="evrion-hero">
+        <div className="evrion-hero-eyebrow">Welcome to EVRION</div>
+        <div className="evrion-hero-title">What type of Cameroonian are you today?</div>
+        <p className="evrion-hero-sub">
+          Not a test. Just those little situations that somehow expose you.
+        </p>
+        <button className="evrion-btn evrion-btn-primary" onClick={onStart}>
+          Start the Vibe Check <ChevronRight size={17} />
+        </button>
+      </div>
+
+      <div className="evrion-section-header">
+        <div className="evrion-section-title">Situations</div>
+      </div>
+      <div className="evrion-hscroll">
+        {HOME_SITUATION_TEASERS.map((s, i) => (
+          <button className="evrion-hub-card" key={i} onClick={onStart}>
+            <div className="evrion-hub-card-icon" style={{ background: s.bg }}>{s.icon}</div>
+            <div className="evrion-hub-card-title">{s.title}</div>
+            <div className="evrion-hub-card-sub">{s.sub}</div>
+          </button>
+        ))}
+      </div>
+
+      <div className="evrion-section-header">
+        <div className="evrion-section-title">Today's Page</div>
+        <button className="evrion-section-see-all" onClick={onToday}>See all <ChevronRight size={13} /></button>
+      </div>
+      <button className="evrion-feature-card" onClick={onToday}>
+        <div className="evrion-feature-card-top">
+          <div className="evrion-hub-card-icon" style={{ background: "rgba(139,92,246,0.22)", marginBottom: 0 }}>🗓</div>
+          <div>
+            <div className="evrion-hub-card-title">What's live right now</div>
+            <div className="evrion-hub-card-sub">{todayCount > 0 ? `${todayCount} post${todayCount !== 1 ? "s" : ""} up today` : "Check what's new"}</div>
+          </div>
+        </div>
+      </button>
+
+      <button className="evrion-feature-card" onClick={onSubmit}>
+        <div className="evrion-feature-card-top">
+          <div className="evrion-hub-card-icon" style={{ background: "rgba(231,177,10,0.2)", marginBottom: 0 }}>✍️</div>
+          <div>
+            <div className="evrion-hub-card-title">Got a situation?</div>
+            <div className="evrion-hub-card-sub">Share it — reviewed before it goes live</div>
+          </div>
+        </div>
+      </button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Play — placeholder hub for future games, with the real quiz as the  */
+/*  one genuinely playable thing here today.                            */
+/* ------------------------------------------------------------------ */
+
+function PlayHubView({ onStart }) {
+  return (
+    <div style={{ paddingTop: 12, paddingBottom: 24 }}>
+      <div className="evrion-section-header">
+        <div className="evrion-section-title">Play now</div>
+      </div>
+      <button className="evrion-feature-card" onClick={onStart}>
+        <div className="evrion-feature-card-top">
+          <div className="evrion-hub-card-icon" style={{ background: "rgba(231,177,10,0.22)", marginBottom: 0 }}>🎯</div>
+          <div>
+            <div className="evrion-hub-card-title">What type of Cameroonian are you?</div>
+            <div className="evrion-hub-card-sub">The original EVRION vibe check</div>
+          </div>
+        </div>
+      </button>
+
+      <div className="evrion-section-header">
+        <div className="evrion-section-title">More on the way</div>
+      </div>
+      <ComingSoonRow items={["Trivia Nights", "EVRION Arena", "Daily Challenge"]} />
+      <div className="evrion-hub-empty">New games and formats are coming to Play — the quiz above is fully live today.</div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Discover — placeholder hub for future browsing/experiences.         */
+/* ------------------------------------------------------------------ */
+
+function DiscoverHubView() {
+  return (
+    <div style={{ paddingTop: 12, paddingBottom: 24 }}>
+      <div className="evrion-section-header">
+        <div className="evrion-section-title">Experiences</div>
+      </div>
+      <ComingSoonRow items={["City Guides", "Featured Creators", "EVRION Originals"]} />
+      <div className="evrion-section-header">
+        <div className="evrion-section-title">Worldwide</div>
+      </div>
+      <ComingSoonRow items={["Diaspora Life", "Beyond Cameroon"]} />
+      <div className="evrion-hub-empty">Discover is where EVRION will grow beyond one quiz — new categories and experiences land here first.</div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Community — real Today's Page + submissions entry points, alongside */
+/*  placeholders for the fuller community layer still to come.          */
+/* ------------------------------------------------------------------ */
+
+function CommunityHubView({ content, onToday, onSubmit }) {
+  const livePosts = (content.todayPosts || []).filter((p) => p.status === "live");
+  const todayStr = todaysDateString();
+  const todayCount = livePosts.filter((p) => p.date === todayStr).length || livePosts.length;
+
+  return (
+    <div style={{ paddingTop: 12, paddingBottom: 24 }}>
+      <div className="evrion-section-header">
+        <div className="evrion-section-title">Today's Page</div>
+        <button className="evrion-section-see-all" onClick={onToday}>See all <ChevronRight size={13} /></button>
+      </div>
+      <button className="evrion-feature-card" onClick={onToday}>
+        <div className="evrion-feature-card-top">
+          <div className="evrion-hub-card-icon" style={{ background: "rgba(139,92,246,0.22)", marginBottom: 0 }}>🗓</div>
+          <div>
+            <div className="evrion-hub-card-title">Fresh from the community</div>
+            <div className="evrion-hub-card-sub">{todayCount > 0 ? `${todayCount} live post${todayCount !== 1 ? "s" : ""}` : "Check what's new"}</div>
+          </div>
+        </div>
+      </button>
+
+      <div className="evrion-section-header">
+        <div className="evrion-section-title">Share a situation</div>
+      </div>
+      <button className="evrion-feature-card" onClick={onSubmit}>
+        <div className="evrion-feature-card-top">
+          <div className="evrion-hub-card-icon" style={{ background: "rgba(231,177,10,0.2)", marginBottom: 0 }}>✍️</div>
+          <div>
+            <div className="evrion-hub-card-title">Got a funny, relatable moment?</div>
+            <div className="evrion-hub-card-sub">Submit it — reviewed before it's used anywhere</div>
+          </div>
+        </div>
+      </button>
+
+      <div className="evrion-section-header">
+        <div className="evrion-section-title">Coming to Community</div>
+      </div>
+      <ComingSoonRow items={["Community Feed", "Daily Challenges", "Reactions"]} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Profile — honest placeholder. EVRION has no visitor accounts yet,   */
+/*  so this never fabricates personal data; it links to what's real     */
+/*  (feedback) and is clear about what's still coming.                  */
+/* ------------------------------------------------------------------ */
+
+function ProfileHubView({ onOpenFeedback }) {
+  return (
+    <div style={{ paddingTop: 30, paddingBottom: 24, textAlign: "center" }}>
+      <div style={{
+        width: 64, height: 64, borderRadius: "50%", margin: "0 auto 16px",
+        background: "rgba(231,177,10,0.15)", display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <User size={28} color="#E7B10A" />
+      </div>
+      <div className="evrion-wordmark" style={{ fontSize: 18, color: "#F6EFDD", marginBottom: 6 }}>
+        Profiles are coming to EVRION
+      </div>
+      <p style={{ fontSize: 13.5, opacity: 0.65, lineHeight: 1.6, maxWidth: 300, margin: "0 auto 24px" }}>
+        Accounts, saved results, and your own stats are on the way. For now, here's what you can already do:
       </p>
-
-      <button className="evrion-btn evrion-btn-primary evrion-btn-block" onClick={onStart}>
-        Start the vibe check <ChevronRight size={17} />
-      </button>
-
-      <button
-        className="evrion-btn evrion-btn-secondary evrion-btn-block"
-        style={{ marginTop: 10 }}
-        onClick={onToday}
-      >
-        🗓 Today's Page
-      </button>
-
-      <button
-        onClick={onSubmit}
-        style={{ background: "none", border: "none", color: "rgba(246,239,221,0.5)", fontSize: 12.5, marginTop: 16, cursor: "pointer", fontWeight: 700 }}
-      >
-        ✍️ Submit a situation
-      </button>
+      <div style={{ padding: "0 20px" }}>
+        <button className="evrion-btn evrion-btn-secondary evrion-btn-block" onClick={onOpenFeedback}>
+          Share feedback with EVRION
+        </button>
+      </div>
     </div>
   );
 }
@@ -1766,7 +2186,7 @@ const FEEDBACK_TYPES = [
   { id: "general", label: "💬 General" },
 ];
 
-function FloatingFeedbackButton({ currentView, onOpenChange }) {
+function FloatingFeedbackButton({ currentView, onOpenChange, raised, openRequest }) {
   const [open, setOpen] = useState(false);
 
   const toggle = (v) => {
@@ -1774,9 +2194,22 @@ function FloatingFeedbackButton({ currentView, onOpenChange }) {
     onOpenChange?.(v);
   };
 
+  // openRequest is an incrementing counter — any change (from outside, e.g.
+  // the Profile tab's "Share feedback" button) opens this same modal rather
+  // than duplicating the feedback form elsewhere.
+  useEffect(() => {
+    if (openRequest) setOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest]);
+
   return (
     <>
-      <button className="evrion-fab" onClick={() => toggle(true)} aria-label="Give feedback">
+      <button
+        className="evrion-fab"
+        style={raised ? { bottom: 84 } : undefined}
+        onClick={() => toggle(true)}
+        aria-label="Give feedback"
+      >
         <MessageCircle size={22} />
       </button>
       {open && <FeedbackModal pageContext={currentView} close={() => toggle(false)} />}
@@ -3547,6 +3980,8 @@ export default function App() {
   const [sharedResult, setSharedResult] = useState(null);
   const [adminLoggedIn, setAdminLoggedIn] = useState(false);
   const [shareStatus, setShareStatus] = useState("");
+  const [returnTab, setReturnTab] = useState("home"); // which hub tab to return to when exiting a focused flow
+  const [feedbackOpenRequest, setFeedbackOpenRequest] = useState(0); // incrementing this opens the feedback modal externally
 
   const connected = !!supabase;
 
@@ -3636,6 +4071,16 @@ export default function App() {
     window.history.replaceState({}, "", "/");
   };
 
+  // Entering a focused flow (quiz, Today's Page, Submit) from a hub tab
+  // remembers which tab launched it, so exiting returns you there — not
+  // always to Home, e.g. launching Today's Page from Community returns to
+  // Community, not Home.
+  const enterFlow = (targetView) => {
+    if (HUB_IDS.includes(view)) setReturnTab(view);
+    setView(targetView);
+  };
+  const exitFlow = () => setView(returnTab);
+
   const finishQuiz = (traitScores) => {
     const { top, pct } = scorePersonalities(traitScores, content.personalities);
     setResult({ personality: top, pct, categoryId: category.id });
@@ -3704,18 +4149,35 @@ export default function App() {
     <div className="evrion-root">
       <GlobalStyle />
       <div className="evrion-shell">
-        {view === "home" && (
-          <HomeView
-            onStart={() => setView("categories")}
-            onToday={() => setView("today")}
-            onSubmit={() => setView("submit")}
-          />
+        {HUB_IDS.includes(view) && (
+          <PlatformShell activeTab={view} onTabChange={setView}>
+            {view === "home" && (
+              <HomeView
+                content={content}
+                onStart={() => enterFlow("categories")}
+                onToday={() => enterFlow("today")}
+                onSubmit={() => enterFlow("submit")}
+              />
+            )}
+            {view === "play" && <PlayHubView onStart={() => enterFlow("categories")} />}
+            {view === "discover" && <DiscoverHubView />}
+            {view === "community" && (
+              <CommunityHubView
+                content={content}
+                onToday={() => enterFlow("today")}
+                onSubmit={() => enterFlow("submit")}
+              />
+            )}
+            {view === "profile" && (
+              <ProfileHubView onOpenFeedback={() => setFeedbackOpenRequest((n) => n + 1)} />
+            )}
+          </PlatformShell>
         )}
 
-        {view === "submit" && <SubmitSituationView onBack={goHome} />}
+        {view === "submit" && <SubmitSituationView onBack={exitFlow} />}
 
         {view === "today" && (
-          <TodayPageView content={content} onBack={goHome} onGoCategories={() => setView("categories")} />
+          <TodayPageView content={content} onBack={exitFlow} onGoCategories={() => enterFlow("categories")} />
         )}
 
         {view === "shared" && sharedResult && (
@@ -3730,7 +4192,7 @@ export default function App() {
               setView("quiz");
               trackEvent("quiz_started", { categoryId: c.id });
             }}
-            onBack={goHome}
+            onBack={exitFlow}
           />
         )}
 
@@ -3782,7 +4244,11 @@ export default function App() {
         )}
 
         {view !== "adminLogin" && view !== "adminHome" && (
-          <FloatingFeedbackButton currentView={view} />
+          <FloatingFeedbackButton
+            currentView={view}
+            raised={HUB_IDS.includes(view)}
+            openRequest={feedbackOpenRequest}
+          />
         )}
       </div>
     </div>
