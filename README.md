@@ -328,6 +328,43 @@ If you'd rather have a second layer beyond "the URL isn't advertised," the
 next honest step up would be IP allowlisting or a Vercel-level password on
 that one route — worth considering later if EVRION grows, not necessary now.
 
+## Platform shell — Home, Play, Discover, Community, Profile (V1.1)
+
+EVRION now presents itself as a platform, not a single quiz. A persistent
+header and bottom tab bar (Home / Play / Discover / Community / Profile)
+wrap five hub screens — this is the new outer shell around everything that
+already existed, not a replacement for it.
+
+**What's real vs. what's a placeholder, explicitly:**
+
+- **Home** — genuinely functional. The hero's "Start the Vibe Check"
+  launches the real quiz exactly as before; the situation cards are real
+  seeded questions; "Today's Page" and "Got a situation?" open the real
+  existing screens for those features.
+- **Play** — the real quiz is here too (Play is the natural home for
+  playable things), with a few clearly-labeled "Coming soon" tiles hinting
+  at future game formats. Nothing here is fabricated as if it already works.
+- **Discover** — entirely forward-looking placeholders (future categories,
+  experiences, worldwide content) — no real functionality yet, and it
+  doesn't pretend to have any.
+- **Community** — real entry points to Today's Page and situation
+  submissions, sitting alongside honest "Coming soon" placeholders for a
+  future feed and challenges.
+- **Profile** — EVRION has no visitor accounts yet, so this never fakes
+  personal data (no invented streaks or names). It says plainly that
+  accounts are coming and links to the one real thing available today:
+  sending feedback.
+
+**Nothing existing was removed or rebuilt.** The quiz, Today's Page,
+Community Situations, Feedback, Analytics, and Admin all work exactly as
+they did — this only changed *how you arrive at them*. Deep flows (taking
+the quiz, viewing Today's Page, submitting a situation) still use their own
+existing screens; the tab bar and header only wrap the five hub/browsing
+screens, the same way most real apps separate "browsing" chrome from
+"focused task" screens. Leaving one of those flows now returns you to
+whichever tab you launched it from (e.g. opening Today's Page from
+Community returns you to Community, not Home).
+
 ## Editing the quiz after launch
 
 Everything is done from the **Admin** panel (see "Admin access" above for
